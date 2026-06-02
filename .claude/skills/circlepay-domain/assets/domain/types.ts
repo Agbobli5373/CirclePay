@@ -179,6 +179,64 @@ export interface ActivityItem {
   reference?: string
 }
 
+// ---------- Ledger (double-entry) ----------
+
+export type LedgerAccountType =
+  | 'moolre_float' // asset: money actually in the Moolre account
+  | 'platform_fee' // income: fees collected
+  | 'fund_pot' // liability: owed to a Susu cycle / fundraiser goal
+  | 'member' // optional per-user sub-ledger
+  | 'hospital' // external medical payee
+  | 'beneficiary' // external fundraiser payee
+
+export type LedgerTxKind = 'contribution' | 'payout' | 'fee' | 'reversal' | 'adjustment'
+
+export interface LedgerAccount {
+  id: string
+  type: LedgerAccountType
+  /** userId / fundId; "GLOBAL" for singletons (moolre_float, platform_fee). */
+  ownerId: string
+}
+
+export interface Posting {
+  accountId: string
+  /** Signed pesewas: positive = into account, negative = out. */
+  amount: Pesewas
+}
+
+/** Append-only. `postings` has >=2 entries that sum to 0. */
+export interface LedgerTransaction {
+  id: string
+  kind: LedgerTxKind
+  postings: Posting[]
+  /** Links to the Moolre movement for reconciliation. */
+  externalref?: string
+  reference?: string
+  ts: string
+}
+
+// ---------- Domain events (transactional outbox) ----------
+
+export type DomainEventType =
+  | 'ContributionSettled'
+  | 'CycleFunded'
+  | 'PayoutSettled'
+  | 'MemberOverdue'
+  | 'MemberDefaulted'
+  | 'FundCompleted'
+
+export type OutboxStatus = 'pending' | 'dispatched' | 'failed'
+
+export interface DomainEvent<T = unknown> {
+  id: string
+  type: DomainEventType
+  payload: T
+  status: OutboxStatus
+  attempts: number
+  createdAt: string
+  dispatchedAt?: string
+}
+
 // ---------- Type guards ----------
 
 export function isSusuFund(f: Fund): f is SusuFund {

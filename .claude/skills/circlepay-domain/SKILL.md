@@ -31,7 +31,8 @@ Audience & tone: market traders, families, community groups. Copy is plain, warm
   • Medical fund ── has ─→ `Contributor[]` and one `beneficiary` + verified `hospital`
 `Pool` = a Susu group/instance (status `active | planning | completed`)
 `Contribution` (money in) and `Payout` (money out) — both reconcile to Moolre via `externalref`
-`TrustScore` (per User) · `ActivityItem` (feed: `contribution | payout | donation | joined`)
+`TrustScore` (per User) · `ActivityItem` (UX feed: `contribution | payout | donation | joined`)
+`Ledger` — append-only **double-entry** accounts/postings (every money movement) + **DomainEvent** outbox (settlement side effects). Balances are derived, reconciled to Moolre.
 
 ## Headline business rules (full list in `references/business-rules.md`)
 
@@ -41,6 +42,7 @@ Audience & tone: market traders, families, community groups. Copy is plain, warm
 - **Medical:** requires a beneficiary; hospital is verified before any payout; payout is **direct to the verified hospital**; supports anonymous contributors and a public shareable link.
 - **Security:** auth is phone → OTP → 4-digit PIN; CirclePay never asks for the PIN by call/SMS.
 - **Idempotency / settlement:** "Paid" is only true after Moolre webhook/status confirmation — see `moolre-integration`.
+- **Ledger & events:** every money movement posts a balanced **double-entry** transaction (append-only); settlement emits **outbox** domain events that drive SMS, trust, activity and payouts. Full model: `references/ledger.md`.
 
 ## User roles
 

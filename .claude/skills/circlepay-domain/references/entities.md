@@ -15,6 +15,10 @@ Canonical shapes live in `assets/domain/types.ts`. This doc explains them and th
 | `ContributionStatus` | `initiated`, `settled`, `failed` |
 | `PayoutStatus` | `initiated`, `settled`, `failed` |
 | `ActivityType` | `contribution`, `payout`, `donation`, `joined` |
+| `LedgerAccountType` | `moolre_float`, `platform_fee`, `fund_pot`, `member`, `hospital`, `beneficiary` |
+| `LedgerTxKind` | `contribution`, `payout`, `fee`, `reversal`, `adjustment` |
+| `DomainEventType` | `ContributionSettled`, `CycleFunded`, `PayoutSettled`, `MemberOverdue`, `MemberDefaulted`, `FundCompleted` |
+| `OutboxStatus` | `pending`, `dispatched`, `failed` |
 | `Network` | `MTN`, `Telecel`, `AirtelTigo` |
 | `TrustStanding` | `new`, `building`, `good`, `excellent`, `locked` |
 
@@ -51,7 +55,14 @@ A giver on a fundraiser: `name | "Anonymous"`, `amount`, `when`, `anonymous: boo
 Per user: `segmentsFilled` (0–5), `standing: TrustStanding`, `fundsCompleted`, `onTimeRate` (0–100), `activeFunds`. Demo profile: 4/5 segments, *Good standing*, 7 completed, 96% on-time, 3 active.
 
 ### ActivityItem
-Feed entry: `id`, `type: ActivityType`, `title`, `detail`, `amount?`, `direction` (`in`|`out`), `date`, `reference?`.
+Feed entry: `id`, `type: ActivityType`, `title`, `detail`, `amount?`, `direction` (`in`|`out`), `date`, `reference?`. (A UX feed — **not** the accounting ledger.)
+
+### Ledger & events (see `references/ledger.md`)
+- **LedgerAccount** — `id`, `type: LedgerAccountType`, `ownerId` (userId/fundId, or `"GLOBAL"` for singletons).
+- **LedgerTransaction** — append-only; `kind: LedgerTxKind`, `postings: Posting[]` (≥2, signed pesewas summing to 0), `externalref?` (Moolre link), `ts`.
+- **Posting** — `accountId`, `amount` (signed pesewas).
+- **DomainEvent** (outbox) — `id`, `type: DomainEventType`, `payload`, `status: OutboxStatus`, `attempts`, `createdAt`, `dispatchedAt?`.
+- Balances/`raised` are **derived** from postings, never stored mutably.
 
 ## Relationships (summary)
 

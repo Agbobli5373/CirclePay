@@ -2,7 +2,7 @@
  * Pure CirclePay domain rules. No I/O, no framework imports — safe anywhere.
  * Encodes the rules in ../../references/business-rules.md.
  */
-import type { Pesewas, TrustScore, TrustStanding } from './types'
+import type { Pesewas, Posting, TrustScore, TrustStanding } from './types'
 
 // ---------- Susu math ----------
 
@@ -83,6 +83,58 @@ export function formatGhs(pesewas: Pesewas, opts: { withSymbol?: boolean } = {})
 /** Convert whole/decimal GHS to integer pesewas (e.g. 500 → 50000). */
 export function toPesewas(ghs: number): Pesewas {
   return Math.round(ghs * 100)
+}
+
+// ---------- Ledger (double-entry) ----------
+
+/** A balanced transaction has >=2 postings whose signed amounts sum to 0. */
+export function isBalanced(postings: Posting[]): boolean {
+  if (postings.length < 2) return false
+  return postings.reduce((sum, p) => sum + p.amount, 0) === 0
+}
+
+export function assertBalanced(postings: Posting[]): void {
+  if (!isBalanced(postings)) {
+    throw new Error('Ledger transaction must have >=2 postings summing to zero')
+  }
+}
+
+/** Derive an account's balance by summing its postings (never store a mutable balance). */
+export function accountBalance(postings: Posting[], accountId: string): Pesewas {
+  return postings
+    .filter((p) => p.accountId === accountId)
+    .reduce((sum, p) => sum + p.amount, 0)
+}
+
+/** Balanced postings for a settled contribution (money lands in the Moolre float). */
+export function contributionPostings(input: {
+  moolreFloatAccountId: string
+  fundPotAccountId: string
+  platformFeeAccountId: string
+  amount: Pesewas // contribution toward the pot
+  fee: Pesewas
+}): Posting[] {
+  const postings: Posting[] = [
+    { accountId: input.moolreFloatAccountId, amount: input.amount + input.fee },
+    { accountId: input.fundPotAccountId, amount: -input.amount },
+    { accountId: input.platformFeeAccountId, amount: -input.fee },
+  ]
+  assertBalanced(postings)
+  return postings
+}
+
+/** Balanced postings for a payout from a fund pot to an external payee (member/hospital). */
+export function payoutPostings(input: {
+  moolreFloatAccountId: string
+  fundPotAccountId: string
+  amount: Pesewas
+}): Posting[] {
+  const postings: Posting[] = [
+    { accountId: input.fundPotAccountId, amount: input.amount },
+    { accountId: input.moolreFloatAccountId, amount: -input.amount },
+  ]
+  assertBalanced(postings)
+  return postings
 }
 
 // ---------- Internal ----------
