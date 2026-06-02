@@ -44,6 +44,9 @@ Auth headers on every request: `X-API-USER` (always) and `X-API-KEY` (private fo
 | Transaction status | `/open/transact/status` | `type:1, idtype(1=externalref,2=moolre id), id, accountnumber` | `SS01` |
 | Balance | `/open/account/status` | `type:1, accountnumber` | `SW01` |
 | List transactions | `/open/account/status` | `type:2, accountnumber, [startdate,enddate,limit,status]` | — |
+| Send SMS | `/open/sms/send` | `type:1, senderid, messages:[{recipient,message,ref?}]` | `SMS01` |
+
+> **SMS auth differs:** `/open/sms/send` uses **`X-API-VASKEY`** only (no `X-API-USER`/`X-API-KEY`, no `accountnumber`), and needs an **approved Sender ID**. Details: `references/sms.md`.
 
 Every response is `{ status, code, message, data, go }`. `status:1` = accepted; check `code` and `data.txstatus` for the real outcome. Codes table: `references/status-codes.md`.
 
@@ -65,6 +68,7 @@ Full request/response in `references/collections.md`.
 | **Medical** contribution | Collection `/transact/payment` |
 | **Medical** payout to verified hospital | Disbursement `/transact/transfer` (wallet or bank `channel:2`) |
 | Receipt / "Paid" state | Webhook `P01` or `/transact/status` `SS01` |
+| SMS receipt / payout alert / due reminder | Send SMS `/open/sms/send` (`X-API-VASKEY`) |
 
 Reference-and-mapping detail, plus the `externalref` scheme (`fundId-cycle-userId`): `references/circlepay-flows.md`.
 
@@ -76,6 +80,7 @@ A framework-agnostic `MoolreClient` is in `assets/moolre-client.ts` (reads the e
 - `nextjs-webhook-route.ts` — verify + re-confirm + mark paid.
 - `nestjs-moolre.service.ts` — same client as a Nest provider/controller.
 - `payout-transfer.ts` — disburse to the next member / a hospital.
+- `send-sms-receipt.ts` — SMS receipt, payout alert, and bulk due reminders.
 
 ## References
 
@@ -84,5 +89,6 @@ A framework-agnostic `MoolreClient` is in `assets/moolre-client.ts` (reads the e
 - `references/disbursements.md` — transfer (wallet & bank).
 - `references/status-and-balance.md` — status, balance, transaction list.
 - `references/webhooks.md` — payload, registering `callback`, hardening (no built-in signature).
+- `references/sms.md` — send SMS (receipts/alerts), VAS key, Sender ID approval.
 - `references/status-codes.md` — result codes.
 - `references/circlepay-flows.md` — app → Moolre mapping and idempotency.

@@ -11,7 +11,9 @@ The `code` field carries the real meaning of a response. Common codes seen acros
 | `SS01` | Transaction successful | Status check |
 | `SW01` | Wallet found (balance returned) | Account status |
 | `P01` | Transaction successful (webhook event) | Webhook |
-| `AIN01` | Authentication error (bad/missing keys) | Any |
+| `SMS01` | SMS sent successfully | Send SMS |
+| `ASMS07` | Sender ID not approved — set it up at app.moolre.com | Send SMS |
+| `AIN01` | Authentication error (bad/missing keys, incl. VAS key) | Any |
 
 ## Handling guidance
 

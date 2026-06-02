@@ -15,6 +15,7 @@ export interface MoolreConfig {
   apiUser: string
   apiKey?: string // private key (live); omit in sandbox
   accountNumber: string
+  vasKey?: string // X-API-VASKEY — required for SMS/WhatsApp (live)
 }
 
 export function moolreConfigFromEnv(env: NodeJS.ProcessEnv = process.env): MoolreConfig {
@@ -24,7 +25,13 @@ export function moolreConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Moolr
   if (!baseUrl || !apiUser || !accountNumber) {
     throw new Error('Missing MOOLRE_BASE_URL / MOOLRE_API_USER / MOOLRE_ACCOUNT_NUMBER')
   }
-  return { baseUrl, apiUser, accountNumber, apiKey: env.MOOLRE_API_KEY }
+  return {
+    baseUrl,
+    apiUser,
+    accountNumber,
+    apiKey: env.MOOLRE_API_KEY,
+    vasKey: env.MOOLRE_VASKEY,
+  }
 }
 
 // ----- Channels -----
@@ -120,6 +127,19 @@ export interface CollectResult {
   raw: MoolreResponse
 }
 
+/** One SMS in a (possibly bulk) send. */
+export interface SmsMessage {
+  recipient: string // phone number, e.g. "0241234567"
+  message: string
+  ref?: string // optional tracking reference
+}
+
+export interface SmsInput {
+  /** Registered + approved Sender ID (max 11 chars), e.g. "CirclePay". */
+  senderId: string
+  messages: SmsMessage[]
+}
+
 export class MoolreClient {
   constructor(private readonly config: MoolreConfig) {}
 
@@ -140,9 +160,31 @@ export class MoolreClient {
       body: JSON.stringify(body),
     })
 
-    let json: MoolreResponse<T>
+    return this.parse<T>(res)
+  }
+
+  /** SMS/WhatsApp endpoints authenticate with X-API-VASKEY only (no X-API-USER / accountnumber). */
+  private async postVas<T>(path: string, body: Record<string, unknown>): Promise<MoolreResponse<T>> {
+    if (!this.config.vasKey) {
+      throw new MoolreError('Missing MOOLRE_VASKEY for SMS/WhatsApp', 'AIN01', {
+        status: 0,
+        code: 'AIN01',
+        message: 'VAS key not configured',
+        data: null as unknown as T,
+        go: null,
+      })
+    }
+    const res = await fetch(`${this.config.baseUrl}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-API-VASKEY': this.config.vasKey },
+      body: JSON.stringify(body),
+    })
+    return this.parse<T>(res)
+  }
+
+  private async parse<T>(res: Response): Promise<MoolreResponse<T>> {
     try {
-      json = (await res.json()) as MoolreResponse<T>
+      return (await res.json()) as MoolreResponse<T>
     } catch {
       throw new MoolreError(`Moolre returned non-JSON (HTTP ${res.status})`, 'PARSE', {
         status: 0,
@@ -152,7 +194,6 @@ export class MoolreClient {
         go: null,
       })
     }
-    return json
   }
 
   /** Collect (debit) from a MoMo wallet. Handle `result.otpRequired` by re-calling with `otpcode`. */
@@ -232,6 +273,23 @@ export class MoolreClient {
       accountnumber: this.config.accountNumber,
       ...opts,
     })
+  }
+
+  /**
+   * Send one or more SMS messages (e.g. payment receipts, payout alerts).
+   * Requires `MOOLRE_VASKEY` and an approved Sender ID (set up at app.moolre.com).
+   * Throws on `ASMS07` (Sender ID not approved) or other non-`SMS01` codes.
+   */
+  async sendSms(input: SmsInput): Promise<MoolreResponse<null>> {
+    const res = await this.postVas<null>('/open/sms/send', {
+      type: 1,
+      senderid: input.senderId,
+      messages: input.messages,
+    })
+    if (!isOk(res) || res.code !== 'SMS01') {
+      throw new MoolreError(messageOf(res) ?? `SMS send failed (${res.code})`, res.code, res)
+    }
+    return res
   }
 }
 
