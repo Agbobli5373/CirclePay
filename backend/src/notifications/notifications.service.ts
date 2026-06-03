@@ -40,4 +40,17 @@ export class NotificationsService {
       messages: [{ recipient, message, ref }],
     })
   }
+
+  /** Contribution receipt SMS (E4). Throws on failure so callers can retry. */
+  async sendReceipt(
+    phone: string,
+    opts: { fundName: string; cycle: number; amountPesewas: number; externalref: string },
+    _lang = 'en',
+  ): Promise<void> {
+    const ghs = (opts.amountPesewas / 100).toFixed(2)
+    const message =
+      `CirclePay: GHS ${ghs} received for ${opts.fundName} (Cycle ${opts.cycle}). ` +
+      `Ref ${opts.externalref}. Powered by Moolre.`
+    await this.sendSms(phone, message, `receipt:${opts.externalref}`)
+  }
 }

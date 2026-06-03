@@ -296,6 +296,8 @@ model Contribution {
   transactionId String?
   reference     String?
   ts            DateTime @default(now())
+  settledAt     DateTime?
+  receiptSentAt DateTime? // SMS-receipt idempotency (E4)
 
   @@index([fundId, status])
 }
