@@ -12,7 +12,9 @@
     "test:arch": "jest --runTestsByPath test/architecture/architecture.spec.ts",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
-    "prisma:migrate": "prisma migrate dev"
+    "prisma:push": "prisma db push",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio"
   },
   "dependencies": {
     "@circlepay/shared": "workspace:*",
