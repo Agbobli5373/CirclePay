@@ -19,8 +19,10 @@ export type FundStatus = 'active' | 'completed' | 'cancelled'
 export type PoolStatus = 'active' | 'planning' | 'completed'
 /** A member's status within the current cycle. */
 export type MemberStatus = 'paid' | 'pending' | 'overdue'
-export type SusuPayoutRule = 'rotating' | 'random'
+export type SusuPayoutRule = 'rotating' | 'random' | 'trust_ordered'
 export type PayoutRule = SusuPayoutRule | 'direct' // 'direct' = Medical → verified hospital
+/** Member's standing within a specific fund (distinct from per-cycle MemberStatus). */
+export type MemberFundStatus = 'active' | 'grace' | 'defaulted' | 'left' | 'completed'
 export type Frequency = 'weekly' | 'monthly'
 export type ContributionStatus = 'initiated' | 'settled' | 'failed'
 export type PayoutStatus = 'initiated' | 'settled' | 'failed'
@@ -67,7 +69,12 @@ export interface Member {
   fundId: string
   name: string
   trustTag?: TrustTag
+  /** Per-cycle payment status. */
   status: MemberStatus
+  /** Fund-level standing (active/grace/defaulted/…). */
+  fundStatus?: MemberFundStatus
+  /** Whether the join deposit has been paid (when the fund requires one). */
+  depositPaid?: boolean
   paidAt?: string
   dueIn?: string
   overdueSince?: string
@@ -91,11 +98,62 @@ export interface SusuFund extends FundBase {
   memberCount: number
   startDate: string
   payoutRule: SusuPayoutRule
+  /** Shortfall protection: require a refundable deposit at join. */
+  requiresDeposit: boolean
+  depositAmount: Pesewas
   currentCycle: number
   /** Always equals memberCount. */
   totalCycles: number
   members: Member[]
   cycles: Cycle[]
+}
+
+// ---------- Medical payout routing (cash-aware, tiered) ----------
+
+export type MedicalPayoutRoute =
+  | 'hospital_momo' // verified hospital MoMo merchant
+  | 'hospital_bank' // hospital bank account (Moolre channel 2)
+  | 'individual_cash' // KYC'd patient/next-of-kin MoMo (cash-only facilities)
+
+export type PayeeVerificationStatus = 'unverified' | 'pending' | 'verified' | 'rejected'
+export type TrancheStatus = 'held' | 'released' | 'settled' | 'refunded'
+export type ReceiptKind = 'proforma' | 'receipt' // bill up front vs stamped receipt after
+export type ReceiptStatus = 'submitted' | 'verified' | 'rejected'
+
+export interface Payee {
+  /** Hospital name or individual (patient/next-of-kin) name. */
+  name: string
+  route: MedicalPayoutRoute
+  /** Destination MoMo number (hospital merchant or individual). */
+  momo?: string
+  /** Destination bank account (route = hospital_bank). */
+  bankAccount?: string
+  /** For individual_cash: relation to the patient (self/parent/sibling…). */
+  relationToPatient?: string
+  verificationStatus: PayeeVerificationStatus
+}
+
+export interface PayoutTranche {
+  id: string
+  fundId: string
+  amount: Pesewas
+  status: TrancheStatus
+  /** The receipt proving the prior tranche was used (gates the next release). */
+  receiptId?: string
+  externalref?: string // Moolre link when released
+  releasedAt?: string
+}
+
+export interface Receipt {
+  id: string
+  fundId: string
+  trancheId?: string
+  kind: ReceiptKind
+  docUrl: string
+  uploadedBy: string // userId
+  status: ReceiptStatus
+  verifiedBy?: string // ops userId
+  ts: string
 }
 
 /** Medical/Education/Business goal-based fundraisers share this shape. */
@@ -109,7 +167,16 @@ export interface FundraiserFund extends FundBase {
   story?: string
   deadline?: string
   shareable: boolean
+  /** Always 'direct' for fundraisers; the destination is described by `payee`/`payoutRoute`. */
   payoutRule: 'direct'
+  payoutRoute: MedicalPayoutRoute
+  payee: Payee
+  /** Escrow + receipt-gated tranches required (default true for individual_cash / high-value). */
+  requiresReceipts: boolean
+  /** Caps (pesewas) applied while unverified / low-trust organizer. */
+  firstTrancheCap?: Pesewas
+  totalCap?: Pesewas
+  tranches?: PayoutTranche[]
   contributors: Contributor[]
 }
 
@@ -186,6 +253,10 @@ export type LedgerAccountType =
   | 'platform_fee' // income: fees collected
   | 'fund_pot' // liability: owed to a Susu cycle / fundraiser goal
   | 'member' // optional per-user sub-ledger
+  | 'deposit' // refundable member collateral held against default
+  | 'safety_pool' // mutual-insurance buffer that covers shortfalls
+  | 'moolre_fee' // expense: fees charged by Moolre on collect/transfer
+  | 'treasury' // CirclePay's own bank/wallet (where net income settles)
   | 'hospital' // external medical payee
   | 'beneficiary' // external fundraiser payee
 
@@ -222,8 +293,14 @@ export type DomainEventType =
   | 'CycleFunded'
   | 'PayoutSettled'
   | 'MemberOverdue'
+  | 'MemberInGrace'
   | 'MemberDefaulted'
+  | 'ShortfallCovered'
   | 'FundCompleted'
+  | 'PayeeVerified'
+  | 'TrancheReleased'
+  | 'ReceiptSubmitted'
+  | 'MedicalFundRefunded'
 
 export type OutboxStatus = 'pending' | 'dispatched' | 'failed'
 

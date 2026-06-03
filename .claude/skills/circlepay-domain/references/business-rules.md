@@ -23,6 +23,17 @@
 2. Score is driven by **on-time rate** and **funds completed**; rendered as 5 segments + a standing label (`new → building → good → excellent`).
 3. **Defaulting → platform-wide lock.** A defaulter's standing becomes `locked`; `canJoinFund` must deny them across **all** funds, not just remove them from one. This is CirclePay's moat ("trust that compounds").
 4. Members may carry a trust tag (`reliable` / `new`) shown to others for transparency.
+5. **Shortfall protection & fair defaults (the hard ROSCA problem).** The lock deters repeat offenders but doesn't protect *this* cycle's money. Funds use one or more of: refundable **deposit**, **trust-ordered payouts** (riskiest paid last), **guarantor**, or a **safety pool**; shortfalls are covered in that order and recorded in the ledger. Defaults follow a `overdue → grace → defaulted → appeal` lifecycle, and the lock is **reversible via appeal** (handles failed MoMo debits / wrong numbers). Full design: `references/risk-and-defaults.md`.
+
+## Fund lifecycle & exits
+
+1. **Under-subscribed Susu** (a `planning` pool never reaches its member count by its start date): it does **not** start; any deposits already paid are **refunded** (ledger reversal), and the fund is `cancelled`.
+2. **Leaving before start:** a member may leave a `planning` Susu; deposit refunded; seat freed.
+3. **Leaving after start:** not freely allowed — the rotation depends on every seat. Exiting mid-Susu is treated like the default path (deposit/guarantor/safety pool cover the remaining obligation); `MemberFundStatus = left`.
+4. **Cancelling a fund:**
+   - *Susu:* only cleanly cancellable before it starts (refund deposits). After start, it must wind down through the remaining cycles or an ops-supervised settlement.
+   - *Fundraiser:* if cancelled or the goal lapses with funds unused, **refund contributors** (reverse to original payers where possible) — never silently redirect funds.
+5. Every refund/reversal is a **new ledger transaction** (append-only), never an edit.
 
 ## Money & fees
 
@@ -45,4 +56,5 @@
 ## Accessibility / inclusivity
 
 1. Every core action reachable via **USSD/MoMo** (no smartphone/internet required).
-2. Plain language, large tap targets, keyboard-friendly, semantic HTML, 4.5:1 contrast.
+2. **USSD members are first-class:** a member with no smartphone can join (SMS prompt), **contribute via USSD + PIN**, and receive SMS receipts/reminders — same cycle accounting and ledger as app members. See `references/risk-and-defaults.md`.
+3. Plain language, large tap targets, keyboard-friendly, semantic HTML, 4.5:1 contrast.

@@ -36,6 +36,13 @@ MOOLRE_ACCOUNT_NUMBER=...
 MOOLRE_WEBHOOK_SECRET=...
 MOOLRE_SMS_SENDER_ID=CirclePay   # must be approved at app.moolre.com
 
+# Jobs / locks / queue (concurrency — see operations.md)
+REDIS_URL=                 # optional: distributed locks / BullMQ queue
+WORKER=false               # set true on the single instance that runs jobs (if not using locks/queue)
+
+# Observability
+SENTRY_DSN=
+
 # AI Advisor (deferred — when going live)
 # ANTHROPIC_API_KEY=...
 ```

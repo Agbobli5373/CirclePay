@@ -24,3 +24,9 @@ Use **`senior-frontend`** for general React/Next patterns. CirclePay specifics:
 
 ## Auth UX
 - Session is the httpOnly cookie; the client doesn't store tokens. Gate in-app routes by checking the session (server-side redirect to `/onboarding` when unauthenticated).
+
+## Localization
+- Support **English / Twi / Ga** (`next-intl`); externalize all copy, persist `User.language`, restore the onboarding language picker. Don't translate amounts — labels only. See `circlepay-domain/references/ghana-context.md`.
+
+## Authorization (client)
+- The client reflects roles for UX (hide admin/ops actions), but the **backend enforces** RBAC. See `circlepay-domain/references/roles-and-permissions.md`.

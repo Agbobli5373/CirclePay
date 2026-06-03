@@ -28,6 +28,7 @@ Suggested patterns:
 Rules:
 - Reuse the **same** ref when retrying the identical action (idempotent). Moolre returns `TP13` if it already exists — on `TP13`, call `/transact/status` with that ref to learn the real outcome instead of blindly retrying.
 - Persist `{externalref → internal record}` so webhooks/status checks can resolve back to the contribution/payout row.
+- **Book Moolre's fee.** Transfer responses return `fee`/`amountfee`; collections are charged too. Record a `moolre_fee` ledger leg for every movement so `moolre_float` reconciles to the real Moolre balance (see `circlepay-domain/references/ledger.md`).
 
 ## Settlement state machine (per contribution/payout)
 

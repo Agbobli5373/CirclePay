@@ -38,8 +38,9 @@ Audience & tone: market traders, families, community groups. Copy is plain, warm
 
 - **Susu math:** `cycles = members`; each cycle's payout pot = `contribution × members`. Payout order is `rotating` (fixed) or `random` draw, fixed at creation.
 - **Member cycle status:** `paid | pending | overdue`. Overdue affects trust.
-- **Trust score:** 5 segments; surfaced as standing (e.g. *Good standing*). Driven by on-time rate + funds completed. Defaulting → platform-wide lock (`canJoinFund` denies).
-- **Medical:** requires a beneficiary; hospital is verified before any payout; payout is **direct to the verified hospital**; supports anonymous contributors and a public shareable link.
+- **Trust score:** 5 segments; surfaced as standing (e.g. *Good standing*). Driven by on-time rate + funds completed. Defaulting → platform-wide lock (`canJoinFund` denies), reversible via appeal.
+- **Shortfall protection:** Susu funds guard against default-after-payout with a refundable deposit, trust-ordered payouts, guarantor, or a safety pool; defaults run `overdue → grace → defaulted → appeal`. See `references/risk-and-defaults.md`.
+- **Medical:** requires a beneficiary; payout is **route-aware** (`hospital_momo` / `hospital_bank` / `individual_cash`) since many Ghanaian facilities take cash — institution-first, with **escrow + receipt-gated tranches** for the individual route, payee verification, caps, and donor-visible trust badges. Supports anonymous contributors + public shareable link. Full model: `references/medical-payouts.md`.
 - **Security:** auth is phone → OTP → 4-digit PIN; CirclePay never asks for the PIN by call/SMS.
 - **Idempotency / settlement:** "Paid" is only true after Moolre webhook/status confirmation — see `moolre-integration`.
 - **Ledger & events:** every money movement posts a balanced **double-entry** transaction (append-only); settlement emits **outbox** domain events that drive SMS, trust, activity and payouts. Full model: `references/ledger.md`.
@@ -47,9 +48,12 @@ Audience & tone: market traders, families, community groups. Copy is plain, warm
 ## User roles
 
 - **Member** — contributes to and receives from a Susu.
-- **Admin** — creates/manages a Susu pool, invites members.
+- **Fund admin** — creates/manages a Susu pool, invites members (before-start changes only).
 - **Beneficiary** — the person a Medical fund is for (may differ from the organizer).
 - **Contributor / Donor** — gives to a fundraising fund (can be anonymous).
+- **Ops** — CirclePay staff: adjudicates appeals, verifies hospitals, AML review (kept separate from fund admins).
+
+Defaults and payouts are **system-driven**, never admin discretion. Full matrix: `references/roles-and-permissions.md`.
 
 ## Key flows (full detail + route map in `references/flows.md`)
 
@@ -74,7 +78,12 @@ Audience & tone: market traders, families, community groups. Copy is plain, warm
 - `references/glossary.md` — domain terms.
 - `references/entities.md` — entity catalog + enums (as built).
 - `references/business-rules.md` — all rules.
+- `references/risk-and-defaults.md` — shortfall protection, default lifecycle, appeals, USSD participation.
+- `references/ledger.md` — double-entry ledger + domain events.
 - `references/flows.md` — flows mapped to routes + Moolre.
-- `references/ghana-context.md` — currency, networks, USSD, tone, accessibility.
+- `references/ghana-context.md` — currency, networks, USSD, tone, localization, accessibility.
+- `references/roles-and-permissions.md` — RBAC (member / fund_admin / ops) + permission matrix.
+- `references/compliance.md` — BoG/non-custodial posture, KYC/limits, data protection, AML, appeals governance.
+- `references/medical-payouts.md` — cash-aware tiered payout routes, escrow + receipt-gated tranches, verification, donor transparency.
 
 Related skills: **`moolre-integration`** (payments), **`senior-frontend`** (React/Next.js patterns).

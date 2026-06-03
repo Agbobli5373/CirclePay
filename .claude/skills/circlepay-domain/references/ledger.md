@@ -14,10 +14,16 @@ CirclePay is **non-custodial** — money flows payer → payee/hospital via Mool
 | `platform_fee` | income | GLOBAL | Fees collected |
 | `fund_pot` | liability | fundId | Funds owed to a Susu cycle / a fundraiser's goal |
 | `member` | sub-ledger | userId | A member's position (optional, for per-user views) |
+| `deposit` | liability | fundId/userId | Refundable member collateral |
+| `safety_pool` | liability | GLOBAL | Mutual-insurance buffer |
+| `moolre_fee` | expense | GLOBAL | Fees Moolre charges on collect/transfer |
+| `treasury` | asset | GLOBAL | CirclePay's own bank/wallet (net income settles here) |
 | `hospital` | external | fundId/hospital | Verified medical payee |
 | `beneficiary` | external | fundId | Non-hospital fundraiser payee |
 
-Singleton accounts (`moolre_float`, `platform_fee`) use a sentinel `ownerId = "GLOBAL"`.
+Singleton accounts (`moolre_float`, `platform_fee`, `safety_pool`, `moolre_fee`, `treasury`) use a sentinel `ownerId = "GLOBAL"`.
+
+> **Moolre fees matter for reconciliation.** Moolre deducts its own fee on collections/transfers (the transfer response returns `fee`/`amountfee`). Always book a `moolre_fee` leg so `moolre_float` equals the *net* cash actually in the Moolre account — otherwise the float will not reconcile.
 
 ## Double-entry rule
 
@@ -27,31 +33,39 @@ A **LedgerTransaction** has ≥2 **Postings**; each posting is `{ accountId, amo
 
 ## Posting recipes
 
-**Contribution settled** (member pays `amount` + `fee`; money lands in Moolre):
+**Contribution settled** (member pays `amount` + platform `pf`; Moolre takes `mf`):
 ```
-moolre_float   += amount + fee
+moolre_float   += amount + pf - mf   // NET cash that reached Moolre
 fund_pot(fund) -= amount
-platform_fee   -= fee
+platform_fee   -= pf
+moolre_fee     += mf                  // expense (omit leg if mf == 0)
 ```
 
-**Susu payout** (pot → cycle recipient; money leaves Moolre):
+**Susu / medical payout** (pot → recipient/hospital; Moolre takes `mf`):
 ```
 fund_pot(fund) += amount
-moolre_float   -= amount
+moolre_float   -= amount + mf
+moolre_fee     += mf                  // expense (omit leg if mf == 0)
 ```
 
-**Medical payout to hospital** (same shape, payee = hospital):
-```
-fund_pot(fund) += amount
-moolre_float   -= amount
-```
+CirclePay's margin on a cycle = `platform_fee` income − `moolre_fee` expense (both visible in the ledger). Use `contributionPostings` / `payoutPostings` in `assets/domain/rules.ts` (they take optional `moolreFee`).
 
 Balances are **derived** by summing an account's postings (`accountBalance` in `assets/domain/rules.ts`) — never stored as a mutable field. `FundraiserDetail.raised` and any "balance" shown in UI are projections of the ledger.
 
 ## Reconciliation
 
-- `moolre_float` balance must equal Moolre's reported balance (`/open/account/status` type 1). A scheduled job compares them and flags drift.
+- `moolre_float` balance must equal Moolre's reported balance (`/open/account/status` type 1). A scheduled job compares them and flags drift (this only holds if `moolre_fee` legs are booked).
 - Each contribution/payout's ledger transaction is keyed to its `externalref`; reconcile against Moolre `/open/transact/status`.
+
+## Treasury / settlement of income
+
+`platform_fee` (income) and `safety_pool` accrue inside the Moolre float. Periodically CirclePay **sweeps net income** to its own bank/wallet — a `treasury` transfer (Moolre disbursement to CirclePay's account):
+```
+treasury     += swept
+moolre_float -= swept (+ mf)
+moolre_fee   += mf
+```
+Keep an auditable record of every sweep; never let `platform_fee`/`safety_pool` balances be edited directly — they're derived from postings.
 
 ## Domain events (transactional outbox)
 

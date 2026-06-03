@@ -32,6 +32,15 @@ enum MemberStatus {
 enum SusuPayoutRule {
   rotating
   random
+  trust_ordered
+}
+
+enum MemberFundStatus {
+  active
+  grace
+  defaulted
+  left
+  completed
 }
 
 enum Frequency {
@@ -69,6 +78,42 @@ enum Network {
   AirtelTigo
 }
 
+enum MemberRole {
+  member
+  admin
+}
+
+enum MedicalPayoutRoute {
+  hospital_momo
+  hospital_bank
+  individual_cash
+}
+
+enum PayeeVerificationStatus {
+  unverified
+  pending
+  verified
+  rejected
+}
+
+enum TrancheStatus {
+  held
+  released
+  settled
+  refunded
+}
+
+enum ReceiptKind {
+  proforma
+  receipt
+}
+
+enum ReceiptStatus {
+  submitted
+  verified
+  rejected
+}
+
 enum TrustStanding {
   new_
   building
@@ -83,6 +128,8 @@ model User {
   phone         String         @unique
   network       Network
   location      String?
+  language      String         @default("en") // en | tw | ga
+  isOpsAdmin    Boolean        @default(false) // platform ops: appeals, hospital verification, AML
   pinHash       String?
   createdAt     DateTime       @default(now())
   trustScore    TrustScore?
@@ -130,22 +177,65 @@ model SusuDetail {
   memberCount  Int
   startDate    DateTime
   payoutRule   SusuPayoutRule @default(rotating)
+  requiresDeposit Boolean     @default(false)
+  depositAmount   Int         @default(0) // pesewas
   currentCycle Int            @default(1)
   totalCycles  Int            // == memberCount
 }
 
 model FundraiserDetail {
-  fundId          String   @id
-  fund            Fund     @relation(fields: [fundId], references: [id], onDelete: Cascade)
-  goal            Int      // pesewas
-  raised          Int      @default(0)
+  fundId          String             @id
+  fund            Fund               @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  goal            Int                // pesewas
+  raised          Int                @default(0)
   beneficiary     String
   hospital        String?
-  hospitalVerified Boolean @default(false)
+  hospitalVerified Boolean           @default(false)
   story           String?
   deadline        DateTime?
-  shareable       Boolean  @default(true)
-  slug            String   @unique
+  shareable       Boolean            @default(true)
+  slug            String             @unique
+  // Cash-aware payout routing (see circlepay-domain/references/medical-payouts.md)
+  payoutRoute     MedicalPayoutRoute @default(hospital_bank)
+  payeeName       String?
+  payeeMomo       String?
+  payeeBank       String?
+  payeeRelation   String?            // individual_cash: relation to patient
+  verificationStatus PayeeVerificationStatus @default(unverified)
+  requiresReceipts Boolean           @default(false)
+  firstTrancheCap Int?               // pesewas
+  totalCap        Int?               // pesewas
+  tranches        PayoutTranche[]
+  receipts        Receipt[]
+}
+
+model PayoutTranche {
+  id          String        @id @default(cuid())
+  fundId      String
+  fundraiser  FundraiserDetail @relation(fields: [fundId], references: [fundId], onDelete: Cascade)
+  amount      Int           // pesewas
+  status      TrancheStatus @default(held)
+  receiptId   String?       // proof gating the NEXT release
+  externalref String?       @unique // Moolre link when released
+  releasedAt  DateTime?
+  createdAt   DateTime      @default(now())
+
+  @@index([fundId])
+}
+
+model Receipt {
+  id         String        @id @default(cuid())
+  fundId     String
+  fundraiser FundraiserDetail @relation(fields: [fundId], references: [fundId], onDelete: Cascade)
+  trancheId  String?
+  kind       ReceiptKind
+  docUrl     String
+  uploadedBy String        // userId
+  status     ReceiptStatus @default(submitted)
+  verifiedBy String?       // ops userId
+  ts         DateTime      @default(now())
+
+  @@index([fundId])
 }
 
 model Member {
@@ -153,9 +243,12 @@ model Member {
   fundId       String
   fund         Fund         @relation(fields: [fundId], references: [id], onDelete: Cascade)
   userId       String
-  user         User         @relation(fields: [userId], references: [id])
-  trustTag     String?      // "reliable" | "new"
-  status       MemberStatus @default(pending)
+  user         User             @relation(fields: [userId], references: [id])
+  trustTag     String?          // "reliable" | "new"
+  role         MemberRole       @default(member) // fund-scoped admin
+  status       MemberStatus     @default(pending)
+  fundStatus   MemberFundStatus @default(active)
+  depositPaid  Boolean          @default(false)
   paidAt       DateTime?
   dueAt        DateTime?
 
@@ -255,6 +348,10 @@ enum LedgerAccountType {
   platform_fee
   fund_pot
   member
+  deposit
+  safety_pool
+  moolre_fee
+  treasury
   hospital
   beneficiary
 }
@@ -318,4 +415,17 @@ model OutboxEvent {
   dispatchedAt DateTime?
 
   @@index([status, createdAt])
+}
+
+// Request-level idempotency for state-changing API calls (e.g. POST /contributions).
+// Client sends an Idempotency-Key header; the first response is stored and replayed.
+model IdempotencyKey {
+  key        String   @id
+  userId     String?
+  endpoint   String
+  statusCode Int
+  response   Json
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
 }

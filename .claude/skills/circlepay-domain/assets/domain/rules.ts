@@ -2,7 +2,7 @@
  * Pure CirclePay domain rules. No I/O, no framework imports — safe anywhere.
  * Encodes the rules in ../../references/business-rules.md.
  */
-import type { Pesewas, Posting, TrustScore, TrustStanding } from './types'
+import type { Pesewas, Posting, PayoutTranche, Receipt, TrustScore, TrustStanding } from './types'
 
 // ---------- Susu math ----------
 
@@ -67,6 +67,27 @@ export function canJoinFund(trust: Pick<TrustScore, 'standing'>): boolean {
   return trust.standing !== 'locked'
 }
 
+/** Higher = safer (paid earlier under trust-ordered payouts). */
+export function riskRank(standing: TrustStanding): number {
+  const order: Record<TrustStanding, number> = {
+    locked: 0,
+    new: 1,
+    building: 2,
+    good: 3,
+    excellent: 4,
+  }
+  return order[standing]
+}
+
+/**
+ * Trust-ordered payout sequence: safest members first, riskiest LAST — so a
+ * low-trust member must contribute through most cycles before receiving the pot.
+ * Shortfall-protection mechanism for `payoutRule = 'trust_ordered'`.
+ */
+export function orderPayoutsByTrust<T extends { standing: TrustStanding }>(members: T[]): T[] {
+  return [...members].sort((a, b) => riskRank(b.standing) - riskRank(a.standing))
+}
+
 // ---------- Money formatting ----------
 
 /** Format pesewas as a display string, e.g. 482000 → "GHS 4,820.00". */
@@ -106,35 +127,87 @@ export function accountBalance(postings: Posting[], accountId: string): Pesewas 
     .reduce((sum, p) => sum + p.amount, 0)
 }
 
-/** Balanced postings for a settled contribution (money lands in the Moolre float). */
+/**
+ * Balanced postings for a settled contribution.
+ * The payer's `amount + platformFee` lands in the Moolre float; if Moolre deducts a
+ * collection fee, pass `moolreFee` + `moolreFeeAccountId` so the float reflects the
+ * NET actually received and reconciles to the Moolre balance.
+ */
 export function contributionPostings(input: {
   moolreFloatAccountId: string
   fundPotAccountId: string
   platformFeeAccountId: string
   amount: Pesewas // contribution toward the pot
-  fee: Pesewas
+  platformFee: Pesewas
+  moolreFee?: Pesewas
+  moolreFeeAccountId?: string
 }): Posting[] {
+  const moolreFee = input.moolreFee ?? 0
   const postings: Posting[] = [
-    { accountId: input.moolreFloatAccountId, amount: input.amount + input.fee },
+    // Net cash that actually reached the Moolre account.
+    { accountId: input.moolreFloatAccountId, amount: input.amount + input.platformFee - moolreFee },
     { accountId: input.fundPotAccountId, amount: -input.amount },
-    { accountId: input.platformFeeAccountId, amount: -input.fee },
+    { accountId: input.platformFeeAccountId, amount: -input.platformFee },
   ]
+  if (moolreFee > 0) {
+    if (!input.moolreFeeAccountId) throw new Error('moolreFeeAccountId required when moolreFee > 0')
+    postings.push({ accountId: input.moolreFeeAccountId, amount: moolreFee })
+  }
   assertBalanced(postings)
   return postings
 }
 
-/** Balanced postings for a payout from a fund pot to an external payee (member/hospital). */
+/**
+ * Balanced postings for a payout from a fund pot to an external payee (member/hospital).
+ * Moolre's transfer fee (if any) is booked as an expense and leaves the float too, so the
+ * float reconciles to the real Moolre balance.
+ */
 export function payoutPostings(input: {
   moolreFloatAccountId: string
   fundPotAccountId: string
   amount: Pesewas
+  moolreFee?: Pesewas
+  moolreFeeAccountId?: string
 }): Posting[] {
+  const moolreFee = input.moolreFee ?? 0
   const postings: Posting[] = [
     { accountId: input.fundPotAccountId, amount: input.amount },
-    { accountId: input.moolreFloatAccountId, amount: -input.amount },
+    { accountId: input.moolreFloatAccountId, amount: -(input.amount + moolreFee) },
   ]
+  if (moolreFee > 0) {
+    if (!input.moolreFeeAccountId) throw new Error('moolreFeeAccountId required when moolreFee > 0')
+    postings.push({ accountId: input.moolreFeeAccountId, amount: moolreFee })
+  }
   assertBalanced(postings)
   return postings
+}
+
+// ---------- Medical payout tranches ----------
+
+/**
+ * Split a total into `n` tranches (pesewas), front-loading any rounding remainder
+ * onto the LAST tranche so the sum is exact.
+ */
+export function splitIntoTranches(total: Pesewas, n: number): Pesewas[] {
+  if (n <= 0) return []
+  const base = Math.floor(total / n)
+  const tranches = Array.from({ length: n }, () => base)
+  tranches[n - 1] += total - base * n
+  return tranches
+}
+
+/**
+ * Can the next tranche be released? The first tranche is always releasable (once the
+ * payee is verified, checked elsewhere). Every later tranche requires the PRIOR tranche
+ * to have a verified stamped receipt — the escrow + proof-of-use gate for cash payouts.
+ */
+export function canReleaseNextTranche(tranches: PayoutTranche[], receipts: Receipt[]): boolean {
+  const released = tranches.filter((t) => t.status !== 'held')
+  if (released.length === 0) return true // first release
+  const prior = released[released.length - 1]
+  return receipts.some(
+    (r) => r.trancheId === prior.id && r.kind === 'receipt' && r.status === 'verified',
+  )
 }
 
 // ---------- Internal ----------

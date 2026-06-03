@@ -10,7 +10,7 @@ Use the **`nestjs-expert`** skill for idiomatic module/DI/testing detail. This d
 | `users` | user profile, trust score read |
 | `funds` | fund CRUD + listing; dispatches to susu/fundraiser logic |
 | `susu` | rotating-savings logic: cycles, payout order, member status |
-| `fundraisers` | Medical/Education/Business goal funds, contributors, public pages |
+| `fundraisers` | Goal funds + **payout routing**: route selection, payee verification (Moolre name-match + ops), escrow **tranche release** (gated by verified receipts, `canReleaseNextTranche`), receipt upload/verify, donor-visible status; emits `PayeeVerified`/`TrancheReleased`/`ReceiptSubmitted`/`MedicalFundRefunded` via the outbox |
 | `contributions` | collect (Moolre), settlement state |
 | `payouts` | disbursement (Moolre transfer), reconciliation |
 | `trust` | scoring + platform-wide defaulter lock |

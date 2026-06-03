@@ -25,6 +25,13 @@
 - Medical/emergency copy is **hopeful, never desperate**.
 - Always reinforce trust: "CirclePay never holds your savings", "Secured by Moolre", "funds go straight to the verified hospital".
 
+## Localization (language)
+
+- Target users are diverse and not all comfortable in English. Support **English, Twi, and Ga** (the original onboarding offered a language picker — restore it and persist `User.language`).
+- Externalize all copy (e.g. `next-intl`); keep strings short and translatable. SMS/USSD text must also respect the chosen language.
+- Numbers/currency stay `GHS x,xxx.xx`; translate labels, not amounts.
+- Stretch (high impact for low-literacy users): audio/voice prompts in USSD/IVR.
+
 ## Accessibility
 - Semantic HTML, keyboard-navigable, visible focus states, 4.5:1 contrast minimum, large tap targets (≈48px).
 - Responsive: mobile (~390px) single column + bottom tab bar; desktop sidebar + centered content.

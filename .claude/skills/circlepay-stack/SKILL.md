@@ -66,6 +66,7 @@ The frontend never holds Moolre keys or talks to Moolre directly. The API is the
 - `references/frontend-conventions.md` — RSC vs client, TanStack Query, calling the API.
 - `references/env.md` — env vars per app.
 - `references/deployment.md` — hosting, migrations, cron, CORS.
+- `references/operations.md` — idempotency, exactly-once payouts, job/outbox locking, observability, ledger tests.
 - `references/ai-advisor.md` — current stub + the seam for Claude later.
 - `assets/schema.prisma`, `assets/backend.env.example`, `assets/frontend.env.example` — starters (reference only).
 

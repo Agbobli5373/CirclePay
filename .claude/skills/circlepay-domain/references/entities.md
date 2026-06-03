@@ -10,14 +10,19 @@ Canonical shapes live in `assets/domain/types.ts`. This doc explains them and th
 | `FundStatus` | `active`, `completed`, `cancelled` |
 | `PoolStatus` | `active`, `planning`, `completed` |
 | `MemberStatus` (per cycle) | `paid`, `pending`, `overdue` |
-| `PayoutRule` | `rotating`, `random` (Susu); `direct` (Medical → hospital) |
+| `MemberFundStatus` (per fund) | `active`, `grace`, `defaulted`, `left`, `completed` |
+| `PayoutRule` | `rotating`, `random`, `trust_ordered` (Susu); `direct` (Medical) |
+| `MedicalPayoutRoute` | `hospital_momo`, `hospital_bank`, `individual_cash` |
+| `PayeeVerificationStatus` | `unverified`, `pending`, `verified`, `rejected` |
+| `TrancheStatus` | `held`, `released`, `settled`, `refunded` |
+| `ReceiptKind` / `ReceiptStatus` | `proforma`/`receipt` ; `submitted`/`verified`/`rejected` |
 | `Frequency` | `weekly`, `monthly` |
 | `ContributionStatus` | `initiated`, `settled`, `failed` |
 | `PayoutStatus` | `initiated`, `settled`, `failed` |
 | `ActivityType` | `contribution`, `payout`, `donation`, `joined` |
-| `LedgerAccountType` | `moolre_float`, `platform_fee`, `fund_pot`, `member`, `hospital`, `beneficiary` |
+| `LedgerAccountType` | `moolre_float`, `platform_fee`, `fund_pot`, `member`, `deposit`, `safety_pool`, `moolre_fee`, `treasury`, `hospital`, `beneficiary` |
 | `LedgerTxKind` | `contribution`, `payout`, `fee`, `reversal`, `adjustment` |
-| `DomainEventType` | `ContributionSettled`, `CycleFunded`, `PayoutSettled`, `MemberOverdue`, `MemberDefaulted`, `FundCompleted` |
+| `DomainEventType` | `ContributionSettled`, `CycleFunded`, `PayoutSettled`, `MemberOverdue`, `MemberInGrace`, `MemberDefaulted`, `ShortfallCovered`, `FundCompleted`, `PayeeVerified`, `TrancheReleased`, `ReceiptSubmitted`, `MedicalFundRefunded` |
 | `OutboxStatus` | `pending`, `dispatched`, `failed` |
 | `Network` | `MTN`, `Telecel`, `AirtelTigo` |
 | `TrustStanding` | `new`, `building`, `good`, `excellent`, `locked` |
@@ -30,14 +35,19 @@ The account holder. `id`, `name` (e.g. "Ama Asante"), `phone` (+233, Ghana Card-
 ### Fund (base)
 `id`, `name`, `type: FundType`, `status: FundStatus`, `createdBy`, `createdAt`. Specialized by type:
 
-- **SusuFund** adds: `contribution` (per cycle, pesewas), `frequency`, `memberCount`, `startDate`, `payoutRule` (`rotating`|`random`), `currentCycle`, `totalCycles` (= `memberCount`), `members: Member[]`, `cycles: Cycle[]`.
-- **MedicalFund** (and Education/Business goal funds) adds: `goal` (pesewas), `raised` (pesewas), `beneficiary`, `hospital?` + `hospitalVerified`, `story`, `deadline?`, `shareable` (public link), `contributors: Contributor[]`.
+- **SusuFund** adds: `contribution` (per cycle, pesewas), `frequency`, `memberCount`, `startDate`, `payoutRule` (`rotating`|`random`|`trust_ordered`), `requiresDeposit` + `depositAmount` (shortfall protection), `currentCycle`, `totalCycles` (= `memberCount`), `members: Member[]`, `cycles: Cycle[]`.
+- **MedicalFund / FundraiserFund** (and Education/Business goal funds) adds: `goal` (pesewas), `raised` (pesewas), `beneficiary`, `hospital?` + `hospitalVerified`, `story`, `deadline?`, `shareable` (public link), `payoutRoute` (`MedicalPayoutRoute`), `payee` (`Payee`), `requiresReceipts`, `firstTrancheCap?`/`totalCap?`, `tranches?`, `contributors: Contributor[]`. See `references/medical-payouts.md`.
+
+### Medical payout entities (see `references/medical-payouts.md`)
+- **Payee** — `name`, `route`, `momo?`/`bankAccount?`, `relationToPatient?`, `verificationStatus`.
+- **PayoutTranche** — `id`, `fundId`, `amount`, `status: TrancheStatus`, `receiptId?`, `externalref?`, `releasedAt?`.
+- **Receipt** — `id`, `fundId`, `trancheId?`, `kind: ReceiptKind`, `docUrl`, `uploadedBy`, `status: ReceiptStatus`, `verifiedBy?`, `ts`.
 
 ### Pool
 A Susu group instance: `id`, `name`, `status: PoolStatus`, `members`/`maxMembers`, `monthlyAmount`, `cycleLength`, `location`, `admin`, `isAdmin?`, `nextPayout?`. (In a full model, a Pool is the operational view of a SusuFund.)
 
 ### Member
-A user's seat in a Susu: `userId`, `fundId`, `name`, `trustTag` (`reliable`|`new`), and per-cycle `status: MemberStatus` with `paidAt?`/`dueIn?`/`overdueSince?`.
+A user's seat in a Susu: `userId`, `fundId`, `name`, `trustTag` (`reliable`|`new`), per-cycle `status: MemberStatus` with `paidAt?`/`dueIn?`/`overdueSince?`, fund-level `fundStatus: MemberFundStatus`, and `depositPaid?`.
 
 ### Cycle
 One round: `index` (1..N), `payeeUserId`, `amount` (pot = contribution × members), `status` (`completed`|`current`|`upcoming`), `isYou?`.
