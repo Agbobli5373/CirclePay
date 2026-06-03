@@ -20,7 +20,7 @@ The single source of truth for **how CirclePay is built**. Decisions here are se
 | ORM/DB | **Prisma → Postgres (Neon)** | money stored as **integer pesewas** |
 | Auth | **custom phone → OTP → PIN** | OTP via Moolre SMS; PIN argon2; JWT in httpOnly cookies (Passport) |
 | Payments/SMS | **Moolre** | via `moolre-integration` `MoolreClient` in a Nest `moolre` module |
-| Jobs | **@nestjs/schedule** | payout disbursement, status reconciliation, SMS reminders |
+| Jobs | **@nestjs/schedule** + **Postgres advisory lock** | payout disbursement, status reconciliation, SMS reminders; Redis/BullMQ upgrade path defined but deferred |
 | AI Advisor | **deferred** (rules-based stub) | clean seam to drop in Claude later (`claude-api`) |
 | Deploy | **Vercel** (frontend) · **Render/Railway/Fly** (backend) · **Neon** (db) | |
 | Test | **Vitest + Testing Library** (FE) · **Jest + Supertest** (API) | |

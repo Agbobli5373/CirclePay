@@ -12,15 +12,32 @@ Money systems fail in the gaps between "happy path" and production. These rules 
 - A Susu cycle's payout uses a **deterministic** `externalref` = `p:{fundId}:{cycle}`, and `Payout.externalref` is **UNIQUE**. So even if `CycleFunded` fires twice, the second insert fails → at most one payout per cycle.
 - Detect "cycle fully funded" inside a DB transaction with row locking (`SELECT … FOR UPDATE` on the cycle) so two concurrent contribution settlements can't both trigger the payout.
 
-## Jobs & the outbox at scale (the real trap)
+## Caching & Redis strategy (decided)
 
-`@nestjs/schedule` and the outbox poller **run on every instance**. If the backend scales horizontally you'll get **duplicate payouts/SMS**. Pick one:
+**Now (MVP / Startup Cup):** No Redis in the stack. All locking and rate-limiting uses Postgres.
 
-- **Single-flight lock:** wrap each scheduled run / outbox batch in a **Postgres advisory lock** (`pg_try_advisory_lock`) or a Redis lock; only the holder runs. Simplest, no new infra beyond what you have.
-- **Dedicated worker:** run jobs/dispatcher only on one designated process (a `WORKER=true` instance).
-- **Real queue:** move side effects to **BullMQ (Redis)** — the outbox dispatcher enqueues jobs; workers consume with built-in retries/concurrency control. Best if volume grows.
+| Concern | MVP approach (Postgres only) | Future (Redis + BullMQ) |
+|---|---|---|
+| Outbox single-flight | `pg_try_advisory_lock` — only one instance runs per tick | Redlock / BullMQ worker |
+| OTP / auth rate-limit | DB-backed counter (`OtpRequest` window) | Redis counter (faster) |
+| JWT session | Stateless httpOnly cookie — no store | Redis session store (only if server-side revocation needed) |
+| Job queue | `@nestjs/schedule` + Postgres lock | BullMQ (Redis) — when volume grows |
+| Response caching | None — DB reads | Redis cache (fund lists, balances) |
 
-Whichever you choose: handlers stay **idempotent** (key on `externalref`/event id), failures increment `attempts` with exponential backoff, and a row that exceeds max attempts goes to `failed` for alerting.
+**Implementation rule:** the outbox poller and every scheduled job is wrapped in a `LockService` interface with a single Postgres implementation (`PgLockService`). Swapping in Redis later = one new implementation class, no call-site changes.
+
+`REDIS_URL` stays in `.env.example` as a future env var but is not required and not imported.
+
+## Jobs & the outbox at scale
+
+`@nestjs/schedule` runs on every instance — guard every job run with the `LockService`:
+
+```ts
+// Postgres advisory lock (pg_try_advisory_lock) — only one instance wins
+async tryWithLock(key: number, fn: () => Promise<void>): Promise<void>
+```
+
+Handlers stay **idempotent** (key on `externalref`/event id), failures increment `attempts` with exponential backoff, rows that exceed max attempts go to `failed` for alerting. See `E2-moolre-ledger.md` (E2-S3) for the full dispatcher spec.
 
 ## Reconciliation jobs
 
