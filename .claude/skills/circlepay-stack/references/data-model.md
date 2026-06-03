@@ -5,7 +5,7 @@ Maps the `circlepay-domain` entities to tables. Full starter in `assets/schema.p
 ## Tables (summary)
 
 - **User** — `id`, `name`, `phone` (unique), `network`, `location?`, `language` (`en|tw|ga`), `isOpsAdmin` (platform ops), `pinHash`, timestamps. 1—1 `TrustScore`. 1—* `Member`, `Contribution`, `Payout`.
-- **OtpRequest** — `id`, `phone`, `codeHash`, `expiresAt`, `attempts`, `consumedAt?`. For the auth flow (short-lived).
+- **Ephemeral auth state (Redis, not Postgres):** OTP codes, OTP rate-limit, failed-PIN lockout, and refresh-sessions (with reuse-detection) all live in Redis with TTLs (`otp:*`, `otp:rl:*`, `pin:fail:*`, `pin:lock:*`, `sess:{userId}:{jti}`). See `references/auth.md`.
 - **Fund** — `id`, `name`, `type` (`Susu|Medical|Education|Business`), `status`, `createdById`, timestamps. Type-specific columns nullable, or split:
   - **SusuDetail** (1—1 with Fund where type=Susu) — `contribution` (Int), `frequency`, `memberCount`, `startDate`, `payoutRule` (`rotating|random|trust_ordered`), `requiresDeposit`/`depositAmount` (Int, shortfall protection), `currentCycle`, `totalCycles`.
   - **FundraiserDetail** (1—1 where type≠Susu) — `goal` (Int), `raised` (Int), `beneficiary`, `hospital?`, `hospitalVerified`, `story?`, `deadline?`, `shareable`, `slug` (unique, public page), **payout routing**: `payoutRoute` (`hospital_momo|hospital_bank|individual_cash`), `payeeName/Momo/Bank/Relation`, `verificationStatus`, `requiresReceipts`, `firstTrancheCap?`/`totalCap?`. Has many `PayoutTranche`, `Receipt`. See `circlepay-domain/references/medical-payouts.md`.

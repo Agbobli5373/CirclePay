@@ -14,17 +14,19 @@ Money systems fail in the gaps between "happy path" and production. These rules 
 
 ## Caching & Redis strategy (decided)
 
-**Now (MVP / Startup Cup):** No Redis in the stack. All locking and rate-limiting uses Postgres.
+**Now:** Redis IS provisioned (Docker `localhost:6380`) and is the store for **ephemeral auth state**. The **outbox/job lock stays on Postgres** (`pg_try_advisory_lock`) for now.
 
-| Concern | MVP approach (Postgres only) | Future (Redis + BullMQ) |
+| Concern | Current approach | Future |
 |---|---|---|
-| Outbox single-flight | `pg_try_advisory_lock` — only one instance runs per tick | Redlock / BullMQ worker |
-| OTP / auth rate-limit | DB-backed counter (`OtpRequest` window) | Redis counter (faster) |
-| JWT session | Stateless httpOnly cookie — no store | Redis session store (only if server-side revocation needed) |
+| Outbox single-flight | `pg_try_advisory_lock` — only one instance runs per tick | Redis Redlock / BullMQ worker |
+| OTP code + rate-limit | **Redis** (`otp:*`, `otp:rl:*`) with TTL | — |
+| Failed-PIN lockout | **Redis** (`pin:fail:*`, `pin:lock:*`) with TTL | — |
+| Refresh sessions + reuse-detection | **Redis** (`sess:{userId}:{jti}`) with TTL | — |
+| Access session | Stateless JWT in httpOnly cookie | — |
 | Job queue | `@nestjs/schedule` + Postgres lock | BullMQ (Redis) — when volume grows |
 | Response caching | None — DB reads | Redis cache (fund lists, balances) |
 
-**Implementation rule:** the outbox poller and every scheduled job is wrapped in a `LockService` interface with a single Postgres implementation (`PgLockService`). Swapping in Redis later = one new implementation class, no call-site changes.
+**Implementation rule:** the outbox poller and every scheduled job is wrapped in a `LockService` interface with a single Postgres implementation (`PgLockService`). Swapping the lock to Redis later = one new implementation class, no call-site changes.
 
 `REDIS_URL` stays in `.env.example` as a future env var but is not required and not imported.
 

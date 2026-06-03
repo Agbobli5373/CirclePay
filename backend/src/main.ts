@@ -22,8 +22,9 @@ async function bootstrap() {
   app.useGlobalFilters(new AllExceptionsFilter())
 
   // OpenAPI / Swagger — UI at /docs, raw spec at /docs-json.
-  // TODO(E1+): when Zod DTOs (createZodDto) are added, call nestjs-zod's swagger patch
-  // before createDocument so request/response schemas are documented automatically.
+  // NOTE: nestjs-zod 4.x's patchNestJsSwagger() is incompatible with @nestjs/swagger 11
+  // (it imports a removed subpath). Routes are documented; rich Zod request-schema
+  // generation is a follow-up (upgrade nestjs-zod → 5.x).
   const swaggerConfig = new DocumentBuilder()
     .setTitle('CirclePay API')
     .setDescription(

@@ -13,7 +13,7 @@ import { filesOfProject } from 'tsarch'
  * src/prisma/prisma.service.ts, and @circlepay/shared declares zero deps.
  */
 
-// Intended feature module folders under src/ (added across later epics).
+// Business feature modules — these must NOT depend on each other (pairwise isolation).
 const FEATURES = [
   'auth',
   'users',
@@ -23,11 +23,11 @@ const FEATURES = [
   'contributions',
   'payouts',
   'trust',
-  'notifications',
-  'moolre',
-  'webhooks',
-  'ledger',
 ]
+
+// Infrastructure / cross-cutting modules — any feature MAY depend on these.
+// (prisma, redis, moolre, notifications, ledger, outbox, common, webhooks)
+// They are excluded from the pairwise feature-isolation rule.
 
 const srcDir = path.resolve(__dirname, '..', '..', 'src')
 const existingFeatures = FEATURES.filter((f) => fs.existsSync(path.join(srcDir, f)))
@@ -57,8 +57,8 @@ describe('architecture', () => {
     )
 
     if (pairs.length === 0) {
-      it('no feature modules yet — rule activates as modules are added', () => {
-        expect(existingFeatures).toEqual([])
+      it('fewer than two feature modules — pairwise isolation not yet applicable', () => {
+        expect(existingFeatures.length).toBeLessThanOrEqual(1)
       })
     }
 

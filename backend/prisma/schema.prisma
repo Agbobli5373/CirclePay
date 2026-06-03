@@ -124,7 +124,7 @@ enum TrustStanding {
 
 model User {
   id            String         @id @default(cuid())
-  name          String
+  name          String?        // optional — phone onboarding doesn't collect a name (set later via profile)
   phone         String         @unique
   network       Network
   location      String?
@@ -140,17 +140,8 @@ model User {
   createdFunds  Fund[]         @relation("FundCreator")
 }
 
-model OtpRequest {
-  id         String    @id @default(cuid())
-  phone      String
-  codeHash   String
-  expiresAt  DateTime
-  attempts   Int       @default(0)
-  consumedAt DateTime?
-  createdAt  DateTime  @default(now())
-
-  @@index([phone])
-}
+// OTP / rate-limit / lockout / refresh-sessions live in Redis (TTL-based), not Postgres.
+// See circlepay-stack/references/auth.md.
 
 model Fund {
   id          String            @id @default(cuid())

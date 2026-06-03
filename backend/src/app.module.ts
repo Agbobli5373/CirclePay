@@ -5,15 +5,21 @@ import { MoolreModule } from './moolre/moolre.module'
 import { LedgerModule } from './ledger/ledger.module'
 import { OutboxModule } from './outbox/outbox.module'
 import { WebhooksModule } from './webhooks/webhooks.module'
+import { RedisModule } from './redis/redis.module'
+import { NotificationsModule } from './notifications/notifications.module'
+import { AuthModule } from './auth/auth.module'
 import { HealthModule } from './health/health.module'
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
     PrismaModule,
+    RedisModule,
     MoolreModule,
+    NotificationsModule,
     LedgerModule,
     OutboxModule,
+    AuthModule,
     WebhooksModule,
     HealthModule,
   ],
