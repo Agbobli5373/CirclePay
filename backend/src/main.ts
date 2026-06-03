@@ -1,7 +1,7 @@
 import 'reflect-metadata'
 import { NestFactory } from '@nestjs/core'
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger'
-import { ZodValidationPipe } from 'nestjs-zod'
+import { ZodValidationPipe, cleanupOpenApiDoc } from 'nestjs-zod'
 import cookieParser from 'cookie-parser'
 import { AppModule } from './app.module'
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter'
@@ -22,9 +22,8 @@ async function bootstrap() {
   app.useGlobalFilters(new AllExceptionsFilter())
 
   // OpenAPI / Swagger — UI at /docs, raw spec at /docs-json.
-  // NOTE: nestjs-zod 4.x's patchNestJsSwagger() is incompatible with @nestjs/swagger 11
-  // (it imports a removed subpath). Routes are documented; rich Zod request-schema
-  // generation is a follow-up (upgrade nestjs-zod → 5.x).
+  // nestjs-zod v5: createZodDto bodies are auto-documented; cleanupOpenApiDoc()
+  // post-processes the spec so Zod schemas render correctly.
   const swaggerConfig = new DocumentBuilder()
     .setTitle('CirclePay API')
     .setDescription(
@@ -35,7 +34,7 @@ async function bootstrap() {
     .addCookieAuth('access_token', { type: 'apiKey', in: 'cookie', name: 'access_token' })
     .build()
   const document = SwaggerModule.createDocument(app, swaggerConfig)
-  SwaggerModule.setup('docs', app, document, { jsonDocumentUrl: 'docs-json' })
+  SwaggerModule.setup('docs', app, cleanupOpenApiDoc(document), { jsonDocumentUrl: 'docs-json' })
 
   const port = Number(process.env.PORT ?? 4000)
   await app.listen(port)
