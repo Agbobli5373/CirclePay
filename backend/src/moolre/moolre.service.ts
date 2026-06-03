@@ -25,11 +25,24 @@ export class MoolreService implements OnModuleInit {
   constructor(private readonly config: ConfigService) {}
 
   onModuleInit(): void {
+    const baseUrl =
+      this.config.get<string>('MOOLRE_BASE_URL') ?? 'https://sandbox.moolre.com'
+    const apiUser = this.config.get<string>('MOOLRE_API_USER')
+    const accountNumber = this.config.get<string>('MOOLRE_ACCOUNT_NUMBER')
+
+    // Warn but don't crash — allows the app to boot without Moolre creds for
+    // local development. Any actual API call will fail with a clear error.
+    if (!apiUser || !accountNumber) {
+      this.logger.warn(
+        'MOOLRE_API_USER or MOOLRE_ACCOUNT_NUMBER not set — ' +
+          'Moolre calls will fail until credentials are configured.',
+      )
+    }
+
     const cfg: MoolreConfig = {
-      baseUrl:
-        this.config.get<string>('MOOLRE_BASE_URL') ?? 'https://sandbox.moolre.com',
-      apiUser: this.config.getOrThrow<string>('MOOLRE_API_USER'),
-      accountNumber: this.config.getOrThrow<string>('MOOLRE_ACCOUNT_NUMBER'),
+      baseUrl,
+      apiUser: apiUser ?? '',
+      accountNumber: accountNumber ?? '',
       apiKey: this.config.get<string>('MOOLRE_API_KEY'),
       vasKey: this.config.get<string>('MOOLRE_VASKEY'),
     }
