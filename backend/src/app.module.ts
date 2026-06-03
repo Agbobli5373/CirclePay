@@ -8,6 +8,7 @@ import { WebhooksModule } from './webhooks/webhooks.module'
 import { RedisModule } from './redis/redis.module'
 import { NotificationsModule } from './notifications/notifications.module'
 import { AuthModule } from './auth/auth.module'
+import { FundsModule } from './funds/funds.module'
 import { HealthModule } from './health/health.module'
 
 @Module({
@@ -20,6 +21,7 @@ import { HealthModule } from './health/health.module'
     LedgerModule,
     OutboxModule,
     AuthModule,
+    FundsModule,
     WebhooksModule,
     HealthModule,
   ],

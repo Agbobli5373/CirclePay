@@ -15,7 +15,7 @@ import { NotificationsService } from '../notifications/notifications.service'
 import { OtpService } from './otp.service'
 import { TokenService } from './token.service'
 import type { RequestOtpDto, VerifyOtpDto, SetPinDto, LoginDto } from './dto/auth.dto'
-import type { AuthUser } from './jwt.strategy'
+import type { AuthUser } from '../common/auth/auth-user'
 
 @Injectable()
 export class AuthService {

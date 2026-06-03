@@ -13,9 +13,9 @@ import type { Request, Response } from 'express'
 import { AuthService } from './auth.service'
 import { RequestOtpDto, VerifyOtpDto, SetPinDto, LoginDto } from './dto/auth.dto'
 import { OkResponseDto, VerifyOtpResponseDto, MeResponseDto } from './dto/auth-responses.dto'
-import { JwtAuthGuard } from './guards/jwt-auth.guard'
-import { CurrentUser } from './decorators/current-user.decorator'
-import type { AuthUser } from './jwt.strategy'
+import { JwtAuthGuard } from '../common/auth/jwt-auth.guard'
+import { CurrentUser } from '../common/auth/current-user.decorator'
+import type { AuthUser } from '../common/auth/auth-user'
 
 function regCookie(req: Request): string | undefined {
   return (req as Request & { cookies?: Record<string, string> }).cookies?.reg_token

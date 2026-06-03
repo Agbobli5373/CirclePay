@@ -1,0 +1,252 @@
+import { FundsService } from './funds.service'
+import { ConfigService } from '@nestjs/config'
+
+const config = { get: () => 'http://localhost:3000' } as unknown as ConfigService
+const notifications = { sendSms: jest.fn().mockResolvedValue(undefined) }
+
+function makeSvc(db: unknown) {
+  return new FundsService(db as never, notifications as never, config)
+}
+
+/** Builds a fund-with-relations result (as returned by `fundInclude`). */
+function fund(opts: {
+  id?: string
+  payoutRule?: string
+  requiresDeposit?: boolean
+  depositAmount?: number
+  memberCount?: number
+  currentCycle?: number
+  status?: string
+  members?: Array<{ userId: string; role?: string; standing?: string; joinedAtMs?: number; status?: string }>
+}) {
+  const members = (opts.members ?? []).map((m, i) => ({
+    userId: m.userId,
+    role: m.role ?? 'member',
+    fundStatus: 'active',
+    status: m.status ?? 'pending',
+    depositPaid: false,
+    joinedAt: new Date(m.joinedAtMs ?? 1_000 + i),
+    user: { name: m.userId.toUpperCase(), trustScore: { standing: m.standing ?? 'good' } },
+  }))
+  return {
+    id: opts.id ?? 'f1',
+    name: 'Kumasi Traders',
+    type: 'Susu',
+    status: opts.status ?? 'active',
+    susu: {
+      contribution: 50000,
+      frequency: 'monthly',
+      memberCount: opts.memberCount ?? 6,
+      currentCycle: opts.currentCycle ?? 1,
+      totalCycles: opts.memberCount ?? 6,
+      payoutRule: opts.payoutRule ?? 'rotating',
+      requiresDeposit: opts.requiresDeposit ?? false,
+      depositAmount: opts.depositAmount ?? 0,
+    },
+    members,
+  }
+}
+
+beforeEach(() => jest.clearAllMocks())
+
+describe('FundsService.createSusu', () => {
+  it('creates a fund + susu + admin member with totalCycles = memberCount', async () => {
+    const created = fund({ memberCount: 4, members: [{ userId: 'u1', role: 'admin' }] })
+    const tx = { fund: { create: jest.fn().mockResolvedValue(created) } }
+    const db = {
+      trustScore: { findUnique: jest.fn().mockResolvedValue({ standing: 'good' }) },
+      $transaction: jest.fn(async (cb: (t: unknown) => unknown) => cb(tx)),
+    }
+    const out = await makeSvc(db).createSusu('u1', {
+      type: 'Susu',
+      name: 'Kumasi Traders',
+      contribution: 50000,
+      frequency: 'monthly',
+      memberCount: 4,
+      startDate: new Date(),
+      payoutRule: 'rotating',
+      requiresDeposit: false,
+      depositAmount: 0,
+    } as never)
+
+    const arg = tx.fund.create.mock.calls[0][0]
+    expect(arg.data.susu.create.totalCycles).toBe(4)
+    expect(arg.data.members.create.role).toBe('admin')
+    expect(arg.data.members.create.depositPaid).toBe(true) // no deposit required
+    expect(out.totalCycles).toBe(4)
+    expect(out.potPesewas).toBe(50000 * 4)
+  })
+
+  it('rejects a locked user with 403 TRUST_LOCKED and never opens a transaction', async () => {
+    const db = {
+      trustScore: { findUnique: jest.fn().mockResolvedValue({ standing: 'locked' }) },
+      $transaction: jest.fn(),
+    }
+    await expect(makeSvc(db).createSusu('u1', { memberCount: 3 } as never)).rejects.toMatchObject({
+      response: { code: 'TRUST_LOCKED' },
+    })
+    expect(db.$transaction).not.toHaveBeenCalled()
+  })
+})
+
+describe('FundsService.invite', () => {
+  const adminFund = () => ({
+    id: 'f1',
+    name: 'Kumasi Traders',
+    susu: { memberCount: 6, currentCycle: 1 },
+    createdBy: { name: 'Ama' },
+  })
+
+  it('creates invites + sends SMS for the admin, capped by remaining seats', async () => {
+    const db = {
+      fund: { findUnique: jest.fn().mockResolvedValue(adminFund()) },
+      member: {
+        findUnique: jest.fn().mockResolvedValue({ role: 'admin' }),
+        count: jest.fn().mockResolvedValue(1),
+      },
+      user: { findMany: jest.fn().mockResolvedValue([]) },
+      invite: { upsert: jest.fn().mockResolvedValue({ token: 'tok' }) },
+    }
+    const out = await makeSvc(db).invite('admin', 'f1', {
+      phones: ['+233240000001', '+233240000002'],
+    } as never)
+    expect(out).toEqual({ invited: 2 })
+    expect(db.invite.upsert).toHaveBeenCalledTimes(2)
+    expect(notifications.sendSms).toHaveBeenCalledTimes(2)
+  })
+
+  it('dedupes phones and skips existing members', async () => {
+    const db = {
+      fund: { findUnique: jest.fn().mockResolvedValue(adminFund()) },
+      member: {
+        findUnique: jest.fn().mockResolvedValue({ role: 'admin' }),
+        count: jest.fn().mockResolvedValue(1),
+      },
+      user: { findMany: jest.fn().mockResolvedValue([{ phone: '+233240000002' }]) },
+      invite: { upsert: jest.fn().mockResolvedValue({ token: 'tok' }) },
+    }
+    const out = await makeSvc(db).invite('admin', 'f1', {
+      phones: ['+233240000001', '+233240000001', '+233240000002'],
+    } as never)
+    expect(out).toEqual({ invited: 1 }) // dup removed, existing member removed
+    expect(db.invite.upsert).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects a non-admin with 403 FORBIDDEN', async () => {
+    const db = {
+      fund: { findUnique: jest.fn().mockResolvedValue(adminFund()) },
+      member: { findUnique: jest.fn().mockResolvedValue({ role: 'member' }) },
+    }
+    await expect(
+      makeSvc(db).invite('u2', 'f1', { phones: ['+233240000001'] } as never),
+    ).rejects.toMatchObject({ response: { code: 'FORBIDDEN' } })
+  })
+
+  it('rejects more invites than remaining seats with 400 SEATS_EXCEEDED', async () => {
+    const db = {
+      fund: { findUnique: jest.fn().mockResolvedValue({ ...adminFund(), susu: { memberCount: 2, currentCycle: 1 } }) },
+      member: {
+        findUnique: jest.fn().mockResolvedValue({ role: 'admin' }),
+        count: jest.fn().mockResolvedValue(1), // 1 seat left
+      },
+      user: { findMany: jest.fn().mockResolvedValue([]) },
+      invite: { upsert: jest.fn() },
+    }
+    await expect(
+      makeSvc(db).invite('admin', 'f1', { phones: ['+233240000001', '+233240000002'] } as never),
+    ).rejects.toMatchObject({ response: { code: 'SEATS_EXCEEDED' } })
+  })
+})
+
+describe('FundsService.join', () => {
+  function joinDb(txFund: ReturnType<typeof fund>, opts: { existing?: unknown; activeCount?: number; user?: unknown } = {}) {
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      fund: { findUnique: jest.fn().mockResolvedValue(txFund) },
+      member: {
+        findUnique: jest.fn().mockResolvedValue(opts.existing ?? null),
+        count: jest.fn().mockResolvedValue(opts.activeCount ?? 0),
+        create: jest.fn().mockResolvedValue({}),
+      },
+      invite: { updateMany: jest.fn().mockResolvedValue({}) },
+    }
+    const db = {
+      user: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue(opts.user ?? { id: 'u2', phone: '+233240000002', trustScore: { standing: 'good' } }),
+      },
+      $transaction: jest.fn(async (cb: (t: unknown) => unknown) => cb(tx)),
+    }
+    return { db, tx }
+  }
+
+  it('joins active immediately when no deposit is required', async () => {
+    const { db, tx } = joinDb(fund({ requiresDeposit: false, memberCount: 5 }), { activeCount: 2 })
+    const out = await makeSvc(db).join('u2', 'f1')
+    expect(out).toEqual({ status: 'active' })
+    expect(tx.member.create).toHaveBeenCalled()
+    expect(tx.$queryRaw).toHaveBeenCalled() // row lock taken
+  })
+
+  it('returns pending_deposit when a deposit is required (collection deferred to E4)', async () => {
+    const { db } = joinDb(fund({ requiresDeposit: true, depositAmount: 20000, memberCount: 5 }), { activeCount: 1 })
+    const out = await makeSvc(db).join('u2', 'f1')
+    expect(out).toEqual({ status: 'pending_deposit', depositAmount: 20000 })
+  })
+
+  it('rejects when the Susu is full with 409 FUND_FULL', async () => {
+    const { db } = joinDb(fund({ memberCount: 3 }), { activeCount: 3 })
+    await expect(makeSvc(db).join('u2', 'f1')).rejects.toMatchObject({ response: { code: 'FUND_FULL' } })
+  })
+
+  it('rejects a duplicate join with 409 ALREADY_MEMBER', async () => {
+    const { db } = joinDb(fund({ memberCount: 5 }), { existing: { userId: 'u2' }, activeCount: 2 })
+    await expect(makeSvc(db).join('u2', 'f1')).rejects.toMatchObject({ response: { code: 'ALREADY_MEMBER' } })
+  })
+
+  it('rejects a locked user with 403 TRUST_LOCKED before opening a transaction', async () => {
+    const { db } = joinDb(fund({}), { user: { id: 'u2', phone: '+233240000002', trustScore: { standing: 'locked' } } })
+    await expect(makeSvc(db).join('u2', 'f1')).rejects.toMatchObject({ response: { code: 'TRUST_LOCKED' } })
+    expect(db.$transaction).not.toHaveBeenCalled()
+  })
+})
+
+describe('FundsService.detail', () => {
+  it('orders payout by join time for rotating', async () => {
+    const f = fund({
+      payoutRule: 'rotating',
+      members: [
+        { userId: 'c', joinedAtMs: 300 },
+        { userId: 'a', joinedAtMs: 100 },
+        { userId: 'b', joinedAtMs: 200 },
+      ],
+    })
+    const db = { fund: { findUnique: jest.fn().mockResolvedValue(f) } }
+    const out = await makeSvc(db).detail('a', 'f1')
+    expect(out.payoutOrder).toEqual(['a', 'b', 'c'])
+    expect(out.members.find((m) => m.userId === 'a')!.payoutPosition).toBe(1)
+  })
+
+  it('orders payout safest-first for trust_ordered', async () => {
+    const f = fund({
+      payoutRule: 'trust_ordered',
+      members: [
+        { userId: 'risky', standing: 'building', joinedAtMs: 100 },
+        { userId: 'safe', standing: 'excellent', joinedAtMs: 200 },
+        { userId: 'mid', standing: 'good', joinedAtMs: 300 },
+      ],
+    })
+    const db = { fund: { findUnique: jest.fn().mockResolvedValue(f) } }
+    const out = await makeSvc(db).detail('safe', 'f1')
+    expect(out.payoutOrder).toEqual(['safe', 'mid', 'risky'])
+  })
+
+  it('rejects a non-member with 403 FORBIDDEN', async () => {
+    const f = fund({ members: [{ userId: 'a' }] })
+    const db = { fund: { findUnique: jest.fn().mockResolvedValue(f) } }
+    await expect(makeSvc(db).detail('stranger', 'f1')).rejects.toMatchObject({
+      response: { code: 'FORBIDDEN' },
+    })
+  })
+})

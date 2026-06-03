@@ -1,3 +1,4 @@
 export * from './types'
 export * from './rules'
 export * from './auth-schemas'
+export * from './fund-schemas'

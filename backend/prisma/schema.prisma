@@ -83,6 +83,12 @@ enum MemberRole {
   admin
 }
 
+enum InviteStatus {
+  pending
+  accepted
+  expired
+}
+
 enum MedicalPayoutRoute {
   hospital_momo
   hospital_bank
@@ -158,6 +164,7 @@ model Fund {
   contributions Contribution[]
   payouts     Payout[]
   contributors Contributor[]
+  invites     Invite[]
 }
 
 model SusuDetail {
@@ -240,10 +247,24 @@ model Member {
   status       MemberStatus     @default(pending)
   fundStatus   MemberFundStatus @default(active)
   depositPaid  Boolean          @default(false)
+  joinedAt     DateTime         @default(now()) // deterministic join order for payout sequencing
   paidAt       DateTime?
   dueAt        DateTime?
 
   @@unique([fundId, userId])
+  @@index([fundId])
+}
+
+model Invite {
+  id        String       @id @default(cuid())
+  fundId    String
+  fund      Fund         @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  phone     String
+  token     String       @unique @default(cuid())
+  status    InviteStatus @default(pending)
+  createdAt DateTime     @default(now())
+
+  @@unique([fundId, phone])
   @@index([fundId])
 }
 

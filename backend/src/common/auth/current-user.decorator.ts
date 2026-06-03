@@ -1,6 +1,6 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common'
 import type { Request } from 'express'
-import type { AuthUser } from '../jwt.strategy'
+import type { AuthUser } from './auth-user'
 
 /** Injects the authenticated user (set by JwtStrategy) into a guarded handler. */
 export const CurrentUser = createParamDecorator(

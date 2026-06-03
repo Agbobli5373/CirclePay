@@ -4,11 +4,7 @@ import { PassportStrategy } from '@nestjs/passport'
 import { ExtractJwt, Strategy } from 'passport-jwt'
 import type { Request } from 'express'
 import type { AccessClaims } from './token.service'
-
-export interface AuthUser {
-  id: string
-  isOpsAdmin: boolean
-}
+import type { AuthUser } from '../common/auth/auth-user'
 
 /** Reads the access token from the httpOnly `access_token` cookie. */
 function cookieExtractor(req: Request): string | null {
