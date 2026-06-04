@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Post, Req, Res, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, HttpCode, Patch, Post, Req, Res, UseGuards } from '@nestjs/common'
 import {
   ApiTags,
   ApiCookieAuth,
@@ -11,7 +11,7 @@ import {
 } from '@nestjs/swagger'
 import type { Request, Response } from 'express'
 import { AuthService } from './auth.service'
-import { RequestOtpDto, VerifyOtpDto, SetPinDto, LoginDto } from './dto/auth.dto'
+import { RequestOtpDto, VerifyOtpDto, SetPinDto, LoginDto, UpdateProfileDto } from './dto/auth.dto'
 import { OkResponseDto, VerifyOtpResponseDto, MeResponseDto } from './dto/auth-responses.dto'
 import { JwtAuthGuard } from '../common/auth/jwt-auth.guard'
 import { CurrentUser } from '../common/auth/current-user.decorator'
@@ -95,5 +95,15 @@ export class AuthController {
   @ApiUnauthorizedResponse({ description: 'No/invalid session' })
   me(@CurrentUser() user: AuthUser) {
     return this.auth.me(user)
+  }
+
+  @Patch('me')
+  @UseGuards(JwtAuthGuard)
+  @ApiCookieAuth('access_token')
+  @ApiOperation({ summary: 'Update the current user profile (name)' })
+  @ApiOkResponse({ type: MeResponseDto })
+  @ApiUnauthorizedResponse({ description: 'No/invalid session' })
+  updateMe(@CurrentUser() user: AuthUser, @Body() dto: UpdateProfileDto) {
+    return this.auth.updateProfile(user, dto)
   }
 }

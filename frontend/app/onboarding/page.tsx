@@ -65,7 +65,8 @@ export default function OnboardingPage() {
   const [otp, setOtp] = useState('')
   const [secondsLeft, setSecondsLeft] = useState(272) // 4:32
 
-  // Step 3 — PIN
+  // Step 3 — PIN (+ optional name)
+  const [name, setName] = useState('')
   const [pin, setPin] = useState('')
   const [confirmPin, setConfirmPin] = useState('')
   const [pinStage, setPinStage] = useState<'create' | 'confirm'>('create')
@@ -113,7 +114,12 @@ export default function OnboardingPage() {
   async function submitPin(finalPin: string) {
     setBusy(true)
     try {
-      await api.auth.setPin({ pin: finalPin, confirmPin: finalPin, network: network as ApiNetwork })
+      await api.auth.setPin({
+        pin: finalPin,
+        confirmPin: finalPin,
+        network: network as ApiNetwork,
+        name: name.trim() || undefined,
+      })
       toast.success('Account created')
       router.replace('/')
     } catch (e) {
@@ -330,6 +336,21 @@ export default function OnboardingPage() {
                       : 'Enter your PIN again to confirm.'}
                   </p>
                 </div>
+
+                {pinStage === 'create' && (
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-foreground">
+                      What should we call you? <span className="text-secondary font-normal">(optional)</span>
+                    </label>
+                    <input
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="e.g. Ama Asante"
+                      maxLength={80}
+                      className="cp-input"
+                    />
+                  </div>
+                )}
 
                 <div className="flex justify-center gap-4">
                   {Array.from({ length: 4 }).map((_, i) => {

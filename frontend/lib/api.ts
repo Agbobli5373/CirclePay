@@ -28,6 +28,17 @@ type RequestOpts = {
   _retried?: boolean
 }
 
+// Credential/auth-control endpoints where a 401 is a real failure (don't try to refresh).
+// Everything else — including /auth/me — refreshes once and retries on 401.
+const NO_REFRESH = new Set([
+  '/auth/request-otp',
+  '/auth/verify-otp',
+  '/auth/set-pin',
+  '/auth/login',
+  '/auth/logout',
+  '/auth/refresh',
+])
+
 async function request<T>(path: string, opts: RequestOpts = {}): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (opts.idempotencyKey) headers['Idempotency-Key'] = opts.idempotencyKey
@@ -39,7 +50,7 @@ async function request<T>(path: string, opts: RequestOpts = {}): Promise<T> {
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   })
 
-  if (res.status === 401 && !opts._retried && !path.startsWith('/auth/')) {
+  if (res.status === 401 && !opts._retried && !NO_REFRESH.has(path.split('?')[0])) {
     // Try a single silent refresh, then replay.
     const refreshed = await fetch(`${BASE}/auth/refresh`, { method: 'POST', credentials: 'include' })
     if (refreshed.ok) return request<T>(path, { ...opts, _retried: true })
@@ -166,6 +177,7 @@ export const api = {
       request<{ ok: true }>('/auth/login', { method: 'POST', body: { phone, pin } }),
     logout: () => request<{ ok: true }>('/auth/logout', { method: 'POST' }),
     me: () => request<Me>('/auth/me'),
+    updateMe: (name: string) => request<Me>('/auth/me', { method: 'PATCH', body: { name } }),
   },
   funds: {
     create: (body: CreateSusuPayload) => request<FundSummary>('/funds', { method: 'POST', body }),

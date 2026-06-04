@@ -2,9 +2,10 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import { AppShell } from '@/components/app-shell'
-import { ShieldCheck, KeyRound, Fingerprint, Lock, ChevronRight, CheckCircle2, Loader2 } from 'lucide-react'
-import { useMe, useFunds, useLogout } from '@/lib/queries'
+import { ShieldCheck, KeyRound, Fingerprint, Lock, ChevronRight, CheckCircle2, Loader2, Pencil, Check, X } from 'lucide-react'
+import { useMe, useFunds, useLogout, useUpdateProfile } from '@/lib/queries'
 
 const STANDING: Record<string, { label: string; segments: number }> = {
   new_: { label: 'New member', segments: 1 },
@@ -29,8 +30,26 @@ export default function ProfilePage() {
   const { data: me, isLoading } = useMe()
   const { data: funds } = useFunds('mine')
   const logout = useLogout()
+  const updateProfile = useUpdateProfile()
   const [biometric, setBiometric] = useState(true)
   const [appLock, setAppLock] = useState(false)
+  const [editingName, setEditingName] = useState(false)
+  const [draftName, setDraftName] = useState('')
+
+  async function saveName() {
+    const n = draftName.trim()
+    if (!n) {
+      setEditingName(false)
+      return
+    }
+    try {
+      await updateProfile.mutateAsync(n)
+      setEditingName(false)
+      toast.success('Name updated')
+    } catch {
+      toast.error('Could not update name')
+    }
+  }
 
   if (isLoading || !me) {
     return (
@@ -62,8 +81,38 @@ export default function ProfilePage() {
           <div className="h-16 w-16 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xl font-semibold flex-shrink-0">
             {initialsOf(me.name, me.phone)}
           </div>
-          <div className="min-w-0">
-            <h1 className="text-xl font-semibold text-foreground">{me.name?.trim() || prettyPhone(me.phone)}</h1>
+          <div className="min-w-0 flex-1">
+            {editingName ? (
+              <div className="flex items-center gap-2">
+                <input
+                  value={draftName}
+                  onChange={(e) => setDraftName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setEditingName(false) }}
+                  placeholder="Your name"
+                  maxLength={80}
+                  autoFocus
+                  className="cp-input h-10 flex-1"
+                />
+                <button onClick={saveName} disabled={updateProfile.isPending} className="p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20" aria-label="Save">
+                  {updateProfile.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                </button>
+                <button onClick={() => setEditingName(false)} className="p-2 rounded-lg text-secondary hover:bg-muted" aria-label="Cancel">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-semibold text-foreground truncate">{me.name?.trim() || prettyPhone(me.phone)}</h1>
+                <button
+                  onClick={() => { setDraftName(me.name ?? ''); setEditingName(true) }}
+                  className="p-1.5 rounded-lg text-secondary hover:text-primary hover:bg-muted transition-colors flex-shrink-0"
+                  aria-label="Edit name"
+                  title="Edit name"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+              </div>
+            )}
             <p className="text-sm text-secondary">{prettyPhone(me.phone)} · {me.network} MoMo</p>
           </div>
         </div>

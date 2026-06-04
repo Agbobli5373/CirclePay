@@ -49,6 +49,14 @@ export function useInvite(fundId: string) {
   return useMutation({ mutationFn: (phones: string[]) => api.funds.invite(fundId, phones) })
 }
 
+export function useUpdateProfile() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (name: string) => api.auth.updateMe(name),
+    onSuccess: (me) => qc.setQueryData(qk.me, me),
+  })
+}
+
 export function useLogout() {
   const qc = useQueryClient()
   return useMutation({

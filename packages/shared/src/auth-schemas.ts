@@ -53,7 +53,13 @@ export const loginSchema = z.object({
   pin: z.string().regex(/^\d{4}$/, 'PIN must be 4 digits'),
 })
 
+/** Editable profile fields (name for now). */
+export const updateProfileSchema = z.object({
+  name: z.string().trim().min(1, 'Enter your name').max(80),
+})
+
 export type RequestOtpInput = z.infer<typeof requestOtpSchema>
 export type VerifyOtpInput = z.infer<typeof verifyOtpSchema>
 export type SetPinInput = z.infer<typeof setPinSchema>
 export type LoginInput = z.infer<typeof loginSchema>
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>

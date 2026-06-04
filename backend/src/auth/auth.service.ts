@@ -148,6 +148,12 @@ export class AuthService {
     return { ok: true }
   }
 
+  /** Update editable profile fields (name) and return the refreshed profile. */
+  async updateProfile(authUser: AuthUser, dto: { name: string }) {
+    await this.db.user.update({ where: { id: authUser.id }, data: { name: dto.name } })
+    return this.me(authUser)
+  }
+
   async me(authUser: AuthUser) {
     const user = await this.db.user.findUnique({
       where: { id: authUser.id },
