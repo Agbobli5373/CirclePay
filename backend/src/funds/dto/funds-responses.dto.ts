@@ -111,6 +111,24 @@ export class InviteResultDto {
   invited!: number
 }
 
+/** A single invite row (admin invite manager). */
+export class InviteDto {
+  @ApiProperty({ example: 'cmsinviteid' })
+  id!: string
+
+  @ApiProperty({ example: '+233240000002' })
+  phone!: string
+
+  @ApiProperty({ example: 'pending', enum: ['pending', 'accepted', 'expired'] })
+  status!: string
+
+  @ApiProperty({ example: 'http://localhost:3000/join/abc123', description: 'Shareable join link for this invitee.' })
+  joinUrl!: string
+
+  @ApiProperty({ example: '2026-06-04T14:00:00.000Z' })
+  createdAt!: Date
+}
+
 /** Result of joining a fund. */
 export class JoinResultDto {
   @ApiProperty({

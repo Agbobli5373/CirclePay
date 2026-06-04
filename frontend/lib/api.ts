@@ -117,6 +117,14 @@ export interface FundDetail extends FundSummary {
   pendingInviteCount: number
 }
 
+export interface Invite {
+  id: string
+  phone: string
+  status: 'pending' | 'accepted' | 'expired'
+  joinUrl: string
+  createdAt: string
+}
+
 export interface ActivityItem {
   id: string
   type: 'contribution' | 'payout' | 'donation' | 'joined'
@@ -187,6 +195,11 @@ export const api = {
     detail: (id: string) => request<FundDetail>(`/funds/${id}`),
     invite: (id: string, phones: string[]) =>
       request<{ invited: number }>(`/funds/${id}/invites`, { method: 'POST', body: { phones } }),
+    invites: (id: string) => request<Invite[]>(`/funds/${id}/invites`),
+    resendInvite: (id: string, inviteId: string) =>
+      request<{ ok: true }>(`/funds/${id}/invites/${inviteId}/resend`, { method: 'POST' }),
+    revokeInvite: (id: string, inviteId: string) =>
+      request<{ ok: true }>(`/funds/${id}/invites/${inviteId}`, { method: 'DELETE' }),
     acceptInvite: (token: string) =>
       request<{ status: string; fundId?: string; depositAmount?: number }>(
         `/funds/join/${encodeURIComponent(token)}`,

@@ -122,25 +122,37 @@ export class FundsService {
 
   // ---------- invite ----------
 
-  async invite(userId: string, fundId: string, dto: InviteMembersDto): Promise<InviteResultDto> {
+  /** Load a fund and assert the caller is its admin. Returns the fund (incl. susu + creator name). */
+  private async assertFundAdmin(fundId: string, userId: string) {
     const fund = await this.db.fund.findUnique({
       where: { id: fundId },
       include: { susu: true, createdBy: { select: { name: true } } },
     })
     if (!fund || !fund.susu) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Fund not found' })
-
-    const requester = await this.db.member.findUnique({
-      where: { fundId_userId: { fundId, userId } },
-    })
+    const requester = await this.db.member.findUnique({ where: { fundId_userId: { fundId, userId } } })
     if (!requester || requester.role !== 'admin') {
-      throw new ForbiddenException({ code: 'FORBIDDEN', message: 'Only the fund admin can invite' })
+      throw new ForbiddenException({ code: 'FORBIDDEN', message: 'Only the fund admin can do this' })
     }
-    if (isSusuStarted(fund.susu)) {
+    return fund
+  }
+
+  private joinUrl(token: string): string {
+    const base = this.config.get<string>('APP_BASE_URL') ?? 'http://localhost:3000'
+    return `${base}/join/${token}`
+  }
+
+  private inviteMessage(inviterName: string, fundName: string, token: string): string {
+    return `${inviterName} invited you to the "${fundName}" CirclePay Susu. Join: ${this.joinUrl(token)} — or dial *203#.`
+  }
+
+  async invite(userId: string, fundId: string, dto: InviteMembersDto): Promise<InviteResultDto> {
+    const fund = await this.assertFundAdmin(fundId, userId)
+    if (isSusuStarted(fund.susu!)) {
       throw new ForbiddenException({ code: 'FORBIDDEN', message: 'The Susu has already started' })
     }
 
     const activeCount = await this.db.member.count({ where: { fundId, fundStatus: 'active' } })
-    const remaining = fund.susu.memberCount - activeCount
+    const remaining = fund.susu!.memberCount - activeCount
 
     const unique = [...new Set(dto.phones)]
     const alreadyMembers = await this.db.user.findMany({
@@ -157,20 +169,15 @@ export class FundsService {
       })
     }
 
-    const base = this.config.get<string>('APP_BASE_URL') ?? 'http://localhost:3000'
     const inviterName = fund.createdBy?.name ?? 'A friend'
-
     for (const phone of candidates) {
       const invite = await this.db.invite.upsert({
         where: { fundId_phone: { fundId, phone } },
         create: { fundId, phone },
         update: { status: 'pending' },
       })
-      const message =
-        `${inviterName} invited you to the "${fund.name}" CirclePay Susu. ` +
-        `Join: ${base}/join/${invite.token} — or dial *203#.`
       try {
-        await this.notifications.sendSms(phone, message, `invite:${fundId}`)
+        await this.notifications.sendSms(phone, this.inviteMessage(inviterName, fund.name, invite.token), `invite:${fundId}`)
       } catch (err) {
         // Sandbox/no-credential environments: don't fail the invite if SMS can't send.
         this.logger.warn(`Invite SMS failed for a recipient: ${(err as Error).message}`)
@@ -178,6 +185,52 @@ export class FundsService {
     }
 
     return { invited: candidates.length }
+  }
+
+  /** Admin: list this fund's invites (with shareable join URLs + status). */
+  async listInvites(userId: string, fundId: string) {
+    await this.assertFundAdmin(fundId, userId)
+    const invites = await this.db.invite.findMany({ where: { fundId }, orderBy: { createdAt: 'desc' } })
+    return invites.map((i) => ({
+      id: i.id,
+      phone: i.phone,
+      status: i.status,
+      joinUrl: this.joinUrl(i.token),
+      createdAt: i.createdAt,
+    }))
+  }
+
+  /** Admin: re-send a pending invite's SMS (reminder/nudge). */
+  async resendInvite(userId: string, fundId: string, inviteId: string): Promise<{ ok: true }> {
+    const fund = await this.assertFundAdmin(fundId, userId)
+    if (isSusuStarted(fund.susu!)) {
+      throw new ForbiddenException({ code: 'FORBIDDEN', message: 'The Susu has already started' })
+    }
+    const invite = await this.db.invite.findUnique({ where: { id: inviteId } })
+    if (!invite || invite.fundId !== fundId) {
+      throw new NotFoundException({ code: 'INVITE_NOT_FOUND', message: 'Invite not found' })
+    }
+    if (invite.status !== 'pending') {
+      throw new BadRequestException({ code: 'INVITE_NOT_PENDING', message: 'This invite is not pending' })
+    }
+    const inviterName = fund.createdBy?.name ?? 'A friend'
+    try {
+      await this.notifications.sendSms(invite.phone, this.inviteMessage(inviterName, fund.name, invite.token), `invite:${fundId}`)
+    } catch (err) {
+      this.logger.warn(`Invite resend SMS failed: ${(err as Error).message}`)
+    }
+    return { ok: true }
+  }
+
+  /** Admin: revoke (expire) an invite, freeing the seat. */
+  async revokeInvite(userId: string, fundId: string, inviteId: string): Promise<{ ok: true }> {
+    await this.assertFundAdmin(fundId, userId)
+    const invite = await this.db.invite.findUnique({ where: { id: inviteId } })
+    if (!invite || invite.fundId !== fundId) {
+      throw new NotFoundException({ code: 'INVITE_NOT_FOUND', message: 'Invite not found' })
+    }
+    await this.db.invite.update({ where: { id: inviteId }, data: { status: 'expired' } })
+    return { ok: true }
   }
 
   // ---------- join ----------

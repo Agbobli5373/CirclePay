@@ -1,4 +1,4 @@
-import { Body, Controller, Get, NotFoundException, Param, Post, UseGuards } from '@nestjs/common'
+import { Body, Controller, Delete, Get, NotFoundException, Param, Post, UseGuards } from '@nestjs/common'
 import {
   ApiTags,
   ApiCookieAuth,
@@ -20,6 +20,7 @@ import {
   FundSummaryDto,
   FundDetailDto,
   InviteResultDto,
+  InviteDto,
   JoinResultDto,
 } from './dto/funds-responses.dto'
 
@@ -47,6 +48,32 @@ export class FundsController {
   @ApiNotFoundResponse({ description: 'NOT_FOUND — fund does not exist' })
   invite(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: InviteMembersDto) {
     return this.funds.invite(user.id, id, dto)
+  }
+
+  @Get(':id/invites')
+  @ApiOperation({ summary: "List a fund's invites with status + shareable join links (admin only)" })
+  @ApiOkResponse({ type: [InviteDto] })
+  @ApiForbiddenResponse({ description: 'FORBIDDEN — admin only' })
+  listInvites(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.funds.listInvites(user.id, id)
+  }
+
+  @Post(':id/invites/:inviteId/resend')
+  @ApiOperation({ summary: 'Resend a pending invite SMS (admin only)' })
+  @ApiOkResponse({ description: '{ ok: true }' })
+  @ApiForbiddenResponse({ description: 'FORBIDDEN — admin only / Susu started' })
+  @ApiNotFoundResponse({ description: 'INVITE_NOT_FOUND' })
+  resendInvite(@CurrentUser() user: AuthUser, @Param('id') id: string, @Param('inviteId') inviteId: string) {
+    return this.funds.resendInvite(user.id, id, inviteId)
+  }
+
+  @Delete(':id/invites/:inviteId')
+  @ApiOperation({ summary: 'Revoke an invite, freeing the seat (admin only)' })
+  @ApiOkResponse({ description: '{ ok: true }' })
+  @ApiForbiddenResponse({ description: 'FORBIDDEN — admin only' })
+  @ApiNotFoundResponse({ description: 'INVITE_NOT_FOUND' })
+  revokeInvite(@CurrentUser() user: AuthUser, @Param('id') id: string, @Param('inviteId') inviteId: string) {
+    return this.funds.revokeInvite(user.id, id, inviteId)
   }
 
   @Post('join/:token')

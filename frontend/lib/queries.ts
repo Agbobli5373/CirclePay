@@ -43,7 +43,33 @@ export function useAcceptInvite() {
 }
 
 export function useInvite(fundId: string) {
-  return useMutation({ mutationFn: (phones: string[]) => api.funds.invite(fundId, phones) })
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (phones: string[]) => api.funds.invite(fundId, phones),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['fund-invites', fundId] })
+      qc.invalidateQueries({ queryKey: qk.fund(fundId) })
+    },
+  })
+}
+
+export function useFundInvites(fundId: string, enabled = true) {
+  return useQuery({ queryKey: ['fund-invites', fundId], queryFn: () => api.funds.invites(fundId), enabled: !!fundId && enabled })
+}
+
+export function useResendInvite(fundId: string) {
+  return useMutation({ mutationFn: (inviteId: string) => api.funds.resendInvite(fundId, inviteId) })
+}
+
+export function useRevokeInvite(fundId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (inviteId: string) => api.funds.revokeInvite(fundId, inviteId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['fund-invites', fundId] })
+      qc.invalidateQueries({ queryKey: qk.fund(fundId) })
+    },
+  })
 }
 
 export function useUpdateProfile() {

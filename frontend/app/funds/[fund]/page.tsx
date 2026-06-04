@@ -1,7 +1,6 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
 import { useParams } from 'next/navigation'
 import { AppShell } from '@/components/app-shell'
 import { CheckCircle2, AlertCircle, Clock, Loader2, UserPlus, UserCircle2 } from 'lucide-react'
@@ -14,7 +13,6 @@ export default function SusuFundPage() {
   const fundId = params.fund
   const { data: me } = useMe()
   const { data: fund, isLoading, isError } = useFund(fundId)
-  const [showInvite, setShowInvite] = useState(false)
 
   if (isLoading) {
     return (
@@ -107,21 +105,23 @@ export default function SusuFundPage() {
                 This Susu starts automatically once all {fund.memberCount} members join — the payout order is set then.
               </p>
 
-              {isAdmin ? (
-                showInvite ? (
-                  <InviteMembers fundId={fund.id} remaining={seatsLeft} onSent={() => setShowInvite(false)} />
-                ) : (
-                  <button onClick={() => setShowInvite(true)} disabled={seatsLeft === 0} className="cp-btn-primary w-full">
-                    <UserPlus className="h-4 w-4" />
-                    Invite members
-                  </button>
-                )
-              ) : (
+              {!isAdmin && (
                 <div className="w-full py-3 bg-muted text-secondary rounded-full font-medium text-center text-sm">
                   Waiting for the group to fill
                 </div>
               )}
             </div>
+
+            {/* Invite & manage (admin) */}
+            {isAdmin && (
+              <div className="cp-card p-6 space-y-4">
+                <div className="flex items-center gap-2">
+                  <UserPlus className="h-5 w-5 text-primary" />
+                  <h2 className="text-lg font-semibold text-foreground">Invite & manage</h2>
+                </div>
+                <InviteMembers fundId={fund.id} fundName={fund.name} remaining={seatsLeft} />
+              </div>
+            )}
 
             {/* Members + open seats */}
             <div className="cp-card p-6 space-y-4">

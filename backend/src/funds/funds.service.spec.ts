@@ -316,3 +316,54 @@ describe('FundsService.detail', () => {
     })
   })
 })
+
+describe('FundsService invite management', () => {
+  const adminFund = { id: 'f1', name: 'Kumasi Traders', susu: { memberCount: 3, currentCycle: 1, startedAt: null }, createdBy: { name: 'Ama' } }
+  function db(over: Record<string, unknown> = {}) {
+    return {
+      fund: { findUnique: jest.fn().mockResolvedValue(adminFund) },
+      member: { findUnique: jest.fn().mockResolvedValue({ role: 'admin' }) },
+      ...over,
+    }
+  }
+
+  it('lists invites with shareable join URLs (admin)', async () => {
+    const d = db({
+      invite: { findMany: jest.fn().mockResolvedValue([{ id: 'i1', phone: '+233240000002', status: 'pending', token: 'tok1', createdAt: new Date() }]) },
+    })
+    const out = await makeSvc(d).listInvites('admin', 'f1')
+    expect(out).toHaveLength(1)
+    expect(out[0]).toMatchObject({ id: 'i1', phone: '+233240000002', status: 'pending', joinUrl: 'http://localhost:3000/join/tok1' })
+  })
+
+  it('rejects listInvites for a non-admin (403)', async () => {
+    const d = db({ member: { findUnique: jest.fn().mockResolvedValue({ role: 'member' }) } })
+    await expect(makeSvc(d).listInvites('u2', 'f1')).rejects.toMatchObject({ response: { code: 'FORBIDDEN' } })
+  })
+
+  it('resends a pending invite (sends SMS)', async () => {
+    const d = db({
+      invite: { findUnique: jest.fn().mockResolvedValue({ id: 'i1', fundId: 'f1', phone: '+233240000002', token: 'tok1', status: 'pending' }) },
+    })
+    const out = await makeSvc(d).resendInvite('admin', 'f1', 'i1')
+    expect(out).toEqual({ ok: true })
+    expect(notifications.sendSms).toHaveBeenCalled()
+  })
+
+  it('rejects resending an invite that is not pending (400)', async () => {
+    const d = db({
+      invite: { findUnique: jest.fn().mockResolvedValue({ id: 'i1', fundId: 'f1', status: 'accepted' }) },
+    })
+    await expect(makeSvc(d).resendInvite('admin', 'f1', 'i1')).rejects.toMatchObject({ response: { code: 'INVITE_NOT_PENDING' } })
+  })
+
+  it('revokes an invite (status → expired)', async () => {
+    const update = jest.fn().mockResolvedValue({})
+    const d = db({
+      invite: { findUnique: jest.fn().mockResolvedValue({ id: 'i1', fundId: 'f1', status: 'pending' }), update },
+    })
+    const out = await makeSvc(d).revokeInvite('admin', 'f1', 'i1')
+    expect(out).toEqual({ ok: true })
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: { status: 'expired' } }))
+  })
+})
