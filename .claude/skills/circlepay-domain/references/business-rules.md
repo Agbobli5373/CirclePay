@@ -8,6 +8,7 @@
 4. **Cadence** = `weekly` or `monthly`. Each cycle has a due date; contributions are expected before the payout.
 5. **Per-cycle member status:** `paid` (✓ + date), `pending` (due in N days), `overdue`. A cycle's payout should only release once the cycle is funded (collected then disbursed the same cycle).
 6. **One pot, one payee per cycle.** The current cycle is highlighted; the user's own cycle is marked "your turn".
+7. **Invite-only, private circles.** A Susu is private: members join only via a unique invite link (`/join/<token>`) the admin sends to their MoMo number — there is no open/public join. The fund **starts** (member list + payout order lock, cycle-1 due dates set) when active members reach `memberCount`.
 
 ## Fundraising (Medical / Education / Business)
 

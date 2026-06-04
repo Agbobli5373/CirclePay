@@ -2,80 +2,10 @@
 
 import { useState } from 'react'
 import { AppShell } from '@/components/app-shell'
-import { ArrowDownLeft, ArrowUpRight, Heart, UserPlus } from 'lucide-react'
-
-type ActivityType = 'contribution' | 'payout' | 'donation' | 'joined'
-
-interface ActivityItem {
-  id: string
-  type: ActivityType
-  title: string
-  detail: string
-  amount?: number
-  direction?: 'in' | 'out'
-  date: string
-  reference?: string
-}
-
-const activity: ActivityItem[] = [
-  {
-    id: '1',
-    type: 'contribution',
-    title: 'Paid GHS 500 to Kumasi Traders',
-    detail: 'Susu contribution · Cycle 3 of 10',
-    amount: 500,
-    direction: 'out',
-    date: 'Today, 09:14',
-    reference: 'CP-8F32A1',
-  },
-  {
-    id: '2',
-    type: 'donation',
-    title: "Donated GHS 200 to Kofi's surgery",
-    detail: 'Medical fund · Korle Bu Teaching Hospital',
-    amount: 200,
-    direction: 'out',
-    date: 'Yesterday, 18:02',
-    reference: 'CP-7C19B4',
-  },
-  {
-    id: '3',
-    type: 'payout',
-    title: 'Received GHS 5,000 payout',
-    detail: 'Kumasi Traders Susu · Cycle 2 complete',
-    amount: 5000,
-    direction: 'in',
-    date: '15 May, 11:30',
-    reference: 'CP-6A04C7',
-  },
-  {
-    id: '4',
-    type: 'contribution',
-    title: 'Paid GHS 300 to Accra Teachers Fund',
-    detail: 'Education fund · Monthly contribution',
-    amount: 300,
-    direction: 'out',
-    date: '12 May, 08:45',
-    reference: 'CP-5B22D9',
-  },
-  {
-    id: '5',
-    type: 'joined',
-    title: 'Joined Women Traders Business Susu',
-    detail: 'GHS 200/month · 15 members · Admin: Ama Mensah',
-    date: '8 May, 14:20',
-  },
-  {
-    id: '6',
-    type: 'payout',
-    title: 'Received GHS 200 refund',
-    detail: 'Tema Hospital Fund · Overpayment returned',
-    amount: 200,
-    direction: 'in',
-    date: '3 May, 16:10',
-    reference: 'CP-4E88F0',
-  },
-]
+import { ArrowDownLeft, ArrowUpRight, Heart, UserPlus, Loader2 } from 'lucide-react'
+import { formatGhs } from '@circlepay/shared'
+import { useActivity } from '@/lib/queries'
+import type { ActivityItem } from '@/lib/api'
 
 const filters = [
   { id: 'all', label: 'All' },
@@ -84,17 +14,27 @@ const filters = [
   { id: 'donation', label: 'Donations' },
 ] as const
 
-const iconFor: Record<ActivityType, { icon: typeof ArrowUpRight; bg: string; color: string }> = {
+const iconFor: Record<ActivityItem['type'], { icon: typeof ArrowUpRight; bg: string; color: string }> = {
   contribution: { icon: ArrowUpRight, bg: 'bg-primary/10', color: 'text-primary' },
   payout: { icon: ArrowDownLeft, bg: 'bg-primary/10', color: 'text-primary' },
   donation: { icon: Heart, bg: 'bg-destructive/10', color: 'text-destructive' },
   joined: { icon: UserPlus, bg: 'bg-muted', color: 'text-secondary' },
 }
 
+function formatWhen(iso: string): string {
+  const d = new Date(iso)
+  const diff = (Date.now() - d.getTime()) / 1000
+  if (diff < 60) return 'Just now'
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
+  return d.toLocaleDateString('en-GH', { day: 'numeric', month: 'short' })
+}
+
 export default function ActivityPage() {
   const [filter, setFilter] = useState<(typeof filters)[number]['id']>('all')
+  const { data: activity, isLoading, isError } = useActivity()
 
-  const filtered = activity.filter((a) => filter === 'all' || a.type === filter)
+  const filtered = (activity ?? []).filter((a) => filter === 'all' || a.type === filter)
 
   return (
     <AppShell currentPage="activity">
@@ -104,7 +44,6 @@ export default function ActivityPage() {
           <p className="text-secondary mt-1">Your contributions, payouts and donations</p>
         </div>
 
-        {/* Filters */}
         <div className="flex gap-2 overflow-x-auto pb-1">
           {filters.map((f) => (
             <button
@@ -121,47 +60,47 @@ export default function ActivityPage() {
           ))}
         </div>
 
-        {/* Feed */}
-        <div className="space-y-2">
-          {filtered.map((item) => {
-            const { icon: Icon, bg, color } = iconFor[item.type]
-            return (
-              <div
-                key={item.id}
-                className="flex items-start gap-3 cp-card p-4 hover:bg-muted/30 transition-colors"
-              >
-                <div className={`h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0 ${bg}`}>
-                  <Icon className={`h-5 w-5 ${color}`} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground">{item.title}</p>
-                  <p className="text-xs text-secondary mt-0.5">{item.detail}</p>
-                  {item.reference && (
-                    <p className="text-xs text-secondary mt-1">Ref: {item.reference}</p>
-                  )}
-                </div>
-                <div className="text-right flex-shrink-0">
-                  {item.amount && (
-                    <p
-                      className={`text-sm font-semibold ${
-                        item.direction === 'in' ? 'text-primary' : 'text-foreground'
-                      }`}
-                    >
-                      {item.direction === 'in' ? '+' : '−'} GHS {item.amount.toLocaleString()}
-                    </p>
-                  )}
-                  <p className="text-xs text-secondary mt-0.5 whitespace-nowrap">{item.date}</p>
-                </div>
-              </div>
-            )
-          })}
+        {isLoading && (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          </div>
+        )}
 
-          {filtered.length === 0 && (
-            <div className="text-center py-12">
-              <p className="text-secondary">No activity here yet</p>
-            </div>
-          )}
-        </div>
+        {isError && <p className="text-center py-12 text-secondary">Could not load your activity.</p>}
+
+        {!isLoading && !isError && (
+          <div className="space-y-2">
+            {filtered.map((item) => {
+              const { icon: Icon, bg, color } = iconFor[item.type]
+              return (
+                <div key={item.id} className="flex items-start gap-3 cp-card p-4">
+                  <div className={`h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0 ${bg}`}>
+                    <Icon className={`h-5 w-5 ${color}`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground">{item.title}</p>
+                    <p className="text-xs text-secondary mt-0.5">{item.detail}</p>
+                    {item.reference && <p className="text-xs text-secondary mt-1 break-all">Ref: {item.reference}</p>}
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    {item.amount != null && (
+                      <p className={`text-sm font-semibold ${item.direction === 'in' ? 'text-primary' : 'text-foreground'}`}>
+                        {item.direction === 'in' ? '+' : '−'} {formatGhs(item.amount)}
+                      </p>
+                    )}
+                    <p className="text-xs text-secondary mt-0.5 whitespace-nowrap">{formatWhen(item.createdAt)}</p>
+                  </div>
+                </div>
+              )
+            })}
+
+            {filtered.length === 0 && (
+              <div className="text-center py-12">
+                <p className="text-secondary">No activity yet — contribute to a Susu to get started.</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </AppShell>
   )

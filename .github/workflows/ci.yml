@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    # Dummy DATABASE_URL so `prisma validate` can resolve the datasource env.
+    # CI doesn't connect to a DB — tests are hermetic (Prisma is mocked) and builds don't query.
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/circlepay
+    steps:
+      - uses: actions/checkout@v4
+
+      # No `version:` here — pnpm is pinned via "packageManager" in package.json
+      # (specifying both errors with ERR_PNPM_BAD_PM_VERSION).
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared package
+        run: pnpm --filter ./packages/shared build
+
+      - name: Generate Prisma client
+        run: pnpm --filter ./backend prisma:generate
+
+      - name: Validate Prisma schema
+        run: pnpm --filter ./backend prisma:validate
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Lint
+        run: pnpm -r lint
+
+      - name: Test (incl. tsarch architecture rules)
+        run: pnpm -r test
+
+      - name: Build apps
+        run: |
+          pnpm --filter ./backend build
+          pnpm --filter ./frontend build

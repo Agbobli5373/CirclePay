@@ -8,6 +8,14 @@
       "cwd": "frontend",
       "port": 3000,
       "autoPort": true
+    },
+    {
+      "name": "api",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["run", "start:dev"],
+      "cwd": "backend",
+      "port": 4001,
+      "autoPort": true
     }
   ]
 }

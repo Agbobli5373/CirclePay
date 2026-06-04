@@ -1,0 +1,55 @@
+# CirclePay local dev / test infrastructure.
+#
+# Host port mapping (avoids clashing with any local Postgres/Redis):
+#   Postgres  → localhost:5433  (container: 5432)
+#   Redis     → localhost:6380  (container: 6379)
+#
+# Start:  pnpm docker:up
+# Stop:   pnpm docker:down
+# Logs:   docker compose logs -f
+#
+# Update backend/.env:
+#   DATABASE_URL=postgresql://circlepay:circlepay@localhost:5433/circlepay
+#   REDIS_URL=redis://localhost:6380
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: circlepay_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: circlepay
+      POSTGRES_PASSWORD: circlepay
+      POSTGRES_DB: circlepay
+    ports:
+      - "5433:5432"          # host:5433 → container:5432 (avoids colliding with local Postgres)
+    volumes:
+      - circlepay_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U circlepay -d circlepay"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: circlepay_redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    ports:
+      - "6380:6379"          # host:6380 → container:6379 (avoids colliding with local Redis)
+    volumes:
+      - circlepay_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+volumes:
+  circlepay_db_data:
+    driver: local
+  circlepay_redis_data:
+    driver: local

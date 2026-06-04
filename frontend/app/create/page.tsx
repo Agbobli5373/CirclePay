@@ -2,8 +2,13 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import { AppShell } from '@/components/app-shell'
-import { Users, Heart, Sparkles, CheckCircle2, BadgeCheck, Share2, UserPlus, ArrowRight, ArrowLeft, Plus, X, Copy, Check, MessageCircle } from 'lucide-react'
+import { Users, Heart, Sparkles, CheckCircle2, BadgeCheck, Share2, UserPlus, ArrowRight, ArrowLeft, Plus, X, Copy, Check, MessageCircle, Loader2 } from 'lucide-react'
+import { toPesewas } from '@circlepay/shared'
+import { useCreateFund, useInvite } from '@/lib/queries'
+import { ApiError } from '@/lib/api'
 
 type FundType = 'Susu' | 'Medical'
 type Frequency = 'Weekly' | 'Monthly'
@@ -35,13 +40,57 @@ export default function CreateFundPage() {
   const [shareable, setShareable] = useState(true)
 
   const [submitted, setSubmitted] = useState(false)
+  const [createdFundId, setCreatedFundId] = useState<string | null>(null)
+  const router = useRouter()
+  const createFund = useCreateFund()
+  const invite = useInvite(createdFundId ?? '')
 
-  // Invite flow (Susu)
+  // Invite flow (Susu) — invites store raw 9-digit numbers
   const [showInvite, setShowInvite] = useState(false)
   const [invitePhone, setInvitePhone] = useState('')
   const [invites, setInvites] = useState<string[]>([])
   const [copied, setCopied] = useState(false)
   const [sent, setSent] = useState(false)
+
+  const susuHref = createdFundId ? `/funds/${createdFundId}` : '/funds'
+
+  async function handleCreate() {
+    if (!canSubmit) return
+    if (!isSusu) {
+      // Medical fundraising isn't wired to the backend yet (EM epic).
+      toast.info('Medical fundraising is coming soon — Susu is live.')
+      return
+    }
+    try {
+      const startDate = new Date(`${startMonth}-01T00:00:00Z`).toISOString()
+      const res = await createFund.mutateAsync({
+        type: 'Susu',
+        name,
+        contribution: toPesewas(amountNum),
+        frequency: frequency === 'Weekly' ? 'weekly' : 'monthly',
+        memberCount: membersNum,
+        startDate,
+        payoutRule: payout === 'Random draw' ? 'random' : 'rotating',
+        requiresDeposit: false,
+        depositAmount: 0,
+      })
+      setCreatedFundId(res.id)
+      setSubmitted(true)
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Could not create fund')
+    }
+  }
+
+  async function sendInvites() {
+    if (!createdFundId || invites.length === 0) return
+    try {
+      const res = await invite.mutateAsync(invites.map((d) => `+233${d}`))
+      setSent(true)
+      toast.success(`${res.invited} invite${res.invited === 1 ? '' : 's'} sent`)
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Could not send invites')
+    }
+  }
 
   const isSusu = type === 'Susu'
   const amountNum = Number(amount)
@@ -56,10 +105,10 @@ export default function CreateFundPage() {
     : Boolean(name && goalNum > 0 && beneficiary && story)
 
   const inviteLink = `circlepay.app/join/${(name || 'fund').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}`
+  const fmtPhone = (d: string) => `${d.slice(0, 2)} ${d.slice(2, 5)} ${d.slice(5, 9)}`
   const addInvite = () => {
     if (invitePhone.length < 9) return
-    const f = `${invitePhone.slice(0, 2)} ${invitePhone.slice(2, 5)} ${invitePhone.slice(5, 9)}`
-    setInvites((list) => [...list, f])
+    setInvites((list) => (list.includes(invitePhone) ? list : [...list, invitePhone]))
     setInvitePhone('')
   }
   const copyLink = () => {
@@ -101,7 +150,7 @@ export default function CreateFundPage() {
                     {invites.length} {invites.length === 1 ? 'person' : 'people'} will get an SMS to join {name}.
                   </p>
                 </div>
-                <Link href="/funds/kumasi-traders" className="cp-btn-primary w-full">
+                <Link href={susuHref} className="cp-btn-primary w-full">
                   Go to fund
                   <ArrowRight className="h-4 w-4" />
                 </Link>
@@ -155,7 +204,7 @@ export default function CreateFundPage() {
                   <div className="space-y-2">
                     {invites.map((p, i) => (
                       <div key={i} className="flex items-center justify-between rounded-xl border border-border p-3">
-                        <span className="text-sm text-foreground">+233 {p}</span>
+                        <span className="text-sm text-foreground">+233 {fmtPhone(p)}</span>
                         <button
                           onClick={() => setInvites((list) => list.filter((_, idx) => idx !== i))}
                           className="p-1 text-secondary hover:text-destructive transition-colors"
@@ -200,9 +249,15 @@ export default function CreateFundPage() {
                   </div>
                 </div>
 
-                <button onClick={() => setSent(true)} disabled={invites.length === 0} className="cp-btn-primary w-full">
-                  <UserPlus className="h-4 w-4" />
-                  Send {invites.length > 0 ? invites.length : ''} invite{invites.length === 1 ? '' : 's'}
+                <button onClick={sendInvites} disabled={invites.length === 0 || invite.isPending} className="cp-btn-primary w-full">
+                  {invite.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <UserPlus className="h-4 w-4" />
+                      Send {invites.length > 0 ? invites.length : ''} invite{invites.length === 1 ? '' : 's'}
+                    </>
+                  )}
                 </button>
               </>
             )}
@@ -264,7 +319,7 @@ export default function CreateFundPage() {
                 </Link>
               )}
               <Link
-                href={isSusu ? '/funds/kumasi-traders' : '/funds/kofi-mensah'}
+                href={isSusu ? susuHref : '/funds/kofi-mensah'}
                 className="cp-btn-ghost w-full"
               >
                 Go to fund
@@ -492,12 +547,18 @@ export default function CreateFundPage() {
           </Link>
           <button
             type="button"
-            disabled={!canSubmit}
-            onClick={() => setSubmitted(true)}
+            disabled={!canSubmit || createFund.isPending}
+            onClick={handleCreate}
             className="cp-btn-primary flex-1"
           >
-            <Sparkles className="h-4 w-4" />
-            Create fund
+            {createFund.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <>
+                <Sparkles className="h-4 w-4" />
+                Create fund
+              </>
+            )}
           </button>
         </div>
       </div>

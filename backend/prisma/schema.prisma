@@ -1,0 +1,450 @@
+// CirclePay starter Prisma schema (REFERENCE — copy to backend/prisma/schema.prisma).
+// Money is ALWAYS Int pesewas (GHS x 100). Mirrors circlepay-domain entities.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum FundType {
+  Susu
+  Medical
+  Education
+  Business
+}
+
+enum FundStatus {
+  active
+  completed
+  cancelled
+}
+
+enum MemberStatus {
+  paid
+  pending
+  overdue
+}
+
+enum SusuPayoutRule {
+  rotating
+  random
+  trust_ordered
+}
+
+enum MemberFundStatus {
+  active
+  grace
+  defaulted
+  left
+  completed
+}
+
+enum Frequency {
+  weekly
+  monthly
+}
+
+enum TxStatus {
+  initiated
+  settled
+  failed
+}
+
+enum CycleStatus {
+  completed
+  current
+  upcoming
+}
+
+enum ActivityType {
+  contribution
+  payout
+  donation
+  joined
+}
+
+enum Direction {
+  in_
+  out_
+}
+
+enum Network {
+  MTN
+  Telecel
+  AirtelTigo
+}
+
+enum MemberRole {
+  member
+  admin
+}
+
+enum InviteStatus {
+  pending
+  accepted
+  expired
+}
+
+enum MedicalPayoutRoute {
+  hospital_momo
+  hospital_bank
+  individual_cash
+}
+
+enum PayeeVerificationStatus {
+  unverified
+  pending
+  verified
+  rejected
+}
+
+enum TrancheStatus {
+  held
+  released
+  settled
+  refunded
+}
+
+enum ReceiptKind {
+  proforma
+  receipt
+}
+
+enum ReceiptStatus {
+  submitted
+  verified
+  rejected
+}
+
+enum TrustStanding {
+  new_
+  building
+  good
+  excellent
+  locked
+}
+
+model User {
+  id            String         @id @default(cuid())
+  name          String?        // optional — phone onboarding doesn't collect a name (set later via profile)
+  phone         String         @unique
+  network       Network
+  location      String?
+  language      String         @default("en") // en | tw | ga
+  isOpsAdmin    Boolean        @default(false) // platform ops: appeals, hospital verification, AML
+  pinHash       String?
+  createdAt     DateTime       @default(now())
+  trustScore    TrustScore?
+  members       Member[]
+  contributions Contribution[]
+  payouts       Payout[]       @relation("PayeeUser")
+  activity      ActivityItem[]
+  createdFunds  Fund[]         @relation("FundCreator")
+}
+
+// OTP / rate-limit / lockout / refresh-sessions live in Redis (TTL-based), not Postgres.
+// See circlepay-stack/references/auth.md.
+
+model Fund {
+  id          String            @id @default(cuid())
+  name        String
+  type        FundType
+  status      FundStatus        @default(active)
+  createdById String
+  createdBy   User              @relation("FundCreator", fields: [createdById], references: [id])
+  createdAt   DateTime          @default(now())
+  susu        SusuDetail?
+  fundraiser  FundraiserDetail?
+  members     Member[]
+  cycles      Cycle[]
+  contributions Contribution[]
+  payouts     Payout[]
+  contributors Contributor[]
+  invites     Invite[]
+}
+
+model SusuDetail {
+  fundId       String         @id
+  fund         Fund           @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  contribution Int            // pesewas
+  frequency    Frequency
+  memberCount  Int
+  startDate    DateTime
+  payoutRule   SusuPayoutRule @default(rotating)
+  requiresDeposit Boolean     @default(false)
+  depositAmount   Int         @default(0) // pesewas
+  currentCycle Int            @default(1)
+  totalCycles  Int            // == memberCount
+  startedAt    DateTime?      // set when the fund fills — locks members + payout order (E5)
+  payoutOrder  Json?          // locked userId[] (who is paid in which cycle)
+}
+
+model FundraiserDetail {
+  fundId          String             @id
+  fund            Fund               @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  goal            Int                // pesewas
+  raised          Int                @default(0)
+  beneficiary     String
+  hospital        String?
+  hospitalVerified Boolean           @default(false)
+  story           String?
+  deadline        DateTime?
+  shareable       Boolean            @default(true)
+  slug            String             @unique
+  // Cash-aware payout routing (see circlepay-domain/references/medical-payouts.md)
+  payoutRoute     MedicalPayoutRoute @default(hospital_bank)
+  payeeName       String?
+  payeeMomo       String?
+  payeeBank       String?
+  payeeRelation   String?            // individual_cash: relation to patient
+  verificationStatus PayeeVerificationStatus @default(unverified)
+  requiresReceipts Boolean           @default(false)
+  firstTrancheCap Int?               // pesewas
+  totalCap        Int?               // pesewas
+  tranches        PayoutTranche[]
+  receipts        Receipt[]
+}
+
+model PayoutTranche {
+  id          String        @id @default(cuid())
+  fundId      String
+  fundraiser  FundraiserDetail @relation(fields: [fundId], references: [fundId], onDelete: Cascade)
+  amount      Int           // pesewas
+  status      TrancheStatus @default(held)
+  receiptId   String?       // proof gating the NEXT release
+  externalref String?       @unique // Moolre link when released
+  releasedAt  DateTime?
+  createdAt   DateTime      @default(now())
+
+  @@index([fundId])
+}
+
+model Receipt {
+  id         String        @id @default(cuid())
+  fundId     String
+  fundraiser FundraiserDetail @relation(fields: [fundId], references: [fundId], onDelete: Cascade)
+  trancheId  String?
+  kind       ReceiptKind
+  docUrl     String
+  uploadedBy String        // userId
+  status     ReceiptStatus @default(submitted)
+  verifiedBy String?       // ops userId
+  ts         DateTime      @default(now())
+
+  @@index([fundId])
+}
+
+model Member {
+  id           String       @id @default(cuid())
+  fundId       String
+  fund         Fund         @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User             @relation(fields: [userId], references: [id])
+  trustTag     String?          // "reliable" | "new"
+  role         MemberRole       @default(member) // fund-scoped admin
+  status       MemberStatus     @default(pending)
+  fundStatus   MemberFundStatus @default(active)
+  depositPaid  Boolean          @default(false)
+  joinedAt     DateTime         @default(now()) // deterministic join order for payout sequencing
+  paidAt       DateTime?
+  dueAt        DateTime?
+
+  @@unique([fundId, userId])
+  @@index([fundId])
+}
+
+model Invite {
+  id        String       @id @default(cuid())
+  fundId    String
+  fund      Fund         @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  phone     String
+  token     String       @unique @default(cuid())
+  status    InviteStatus @default(pending)
+  createdAt DateTime     @default(now())
+
+  @@unique([fundId, phone])
+  @@index([fundId])
+}
+
+model Cycle {
+  id          String      @id @default(cuid())
+  fundId      String
+  fund        Fund        @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  index       Int
+  payeeUserId String
+  amount      Int         // pesewas (pot)
+  status      CycleStatus @default(upcoming)
+
+  @@unique([fundId, index])
+}
+
+model Contribution {
+  id            String   @id @default(cuid())
+  fundId        String
+  fund          Fund     @relation(fields: [fundId], references: [id])
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  cycle         Int?
+  amount        Int      // pesewas
+  fee           Int      @default(0)
+  total         Int
+  network       Network
+  externalref   String   @unique
+  status        TxStatus @default(initiated)
+  transactionId String?
+  reference     String?
+  ts            DateTime @default(now())
+  settledAt     DateTime?
+  receiptSentAt DateTime? // SMS-receipt idempotency (E4)
+
+  @@index([fundId, status])
+}
+
+model Payout {
+  id            String   @id @default(cuid())
+  fundId        String
+  fund          Fund     @relation(fields: [fundId], references: [id])
+  cycle         Int?
+  payeeUserId   String?
+  payee         User?    @relation("PayeeUser", fields: [payeeUserId], references: [id])
+  hospital      String?
+  amount        Int      // pesewas
+  externalref   String   @unique
+  status        TxStatus @default(initiated)
+  transactionId String?
+  ts            DateTime @default(now())
+  settledAt     DateTime?
+
+  @@index([fundId, status])
+}
+
+model Contributor {
+  id          String   @id @default(cuid())
+  fundId      String
+  fund        Fund     @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  displayName String   // "Anonymous" when anonymous
+  amount      Int      // pesewas
+  anonymous   Boolean  @default(false)
+  userId      String?
+  ts          DateTime @default(now())
+}
+
+model TrustScore {
+  userId              String        @id
+  user                User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  segmentsFilled      Int           @default(0)
+  standing            TrustStanding @default(new_)
+  fundsCompleted      Int           @default(0)
+  onTimeRate          Int           @default(100) // 0-100, derived from the counters below
+  activeFunds         Int           @default(0)
+  contributionsTotal  Int           @default(0) // settled contributions counted toward on-time rate
+  contributionsOnTime Int           @default(0) // of those, paid on/before the due date
+}
+
+model ActivityItem {
+  id        String       @id @default(cuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [id])
+  type      ActivityType
+  title     String
+  detail    String
+  amount    Int?         // pesewas
+  direction Direction?
+  reference String?
+  createdAt DateTime     @default(now())
+
+  @@index([userId, createdAt])
+}
+
+// ----- Double-entry ledger (append-only) -----
+
+enum LedgerAccountType {
+  moolre_float
+  platform_fee
+  fund_pot
+  member
+  deposit
+  safety_pool
+  moolre_fee
+  treasury
+  hospital
+  beneficiary
+}
+
+enum LedgerTxKind {
+  contribution
+  payout
+  fee
+  reversal
+  adjustment
+}
+
+enum OutboxStatus {
+  pending
+  dispatched
+  failed
+}
+
+model LedgerAccount {
+  id        String            @id @default(cuid())
+  type      LedgerAccountType
+  // userId / fundId; use the sentinel "GLOBAL" for singletons (moolre_float, platform_fee)
+  ownerId   String
+  createdAt DateTime          @default(now())
+  postings  Posting[]
+
+  @@unique([type, ownerId])
+}
+
+model LedgerTransaction {
+  id          String       @id @default(cuid())
+  kind        LedgerTxKind
+  externalref String?      // link to the Moolre movement
+  reference   String?
+  ts          DateTime     @default(now())
+  postings    Posting[]
+
+  @@index([externalref])
+}
+
+model Posting {
+  id        String            @id @default(cuid())
+  txId      String
+  tx        LedgerTransaction @relation(fields: [txId], references: [id], onDelete: Cascade)
+  accountId String
+  account   LedgerAccount     @relation(fields: [accountId], references: [id])
+  amount    Int               // SIGNED pesewas; a transaction's postings sum to 0
+
+  @@index([accountId])
+}
+
+// ----- Transactional outbox (domain events) -----
+
+model OutboxEvent {
+  id           String       @id @default(cuid())
+  type         String       // DomainEventType
+  payload      Json
+  status       OutboxStatus @default(pending)
+  attempts     Int          @default(0)
+  createdAt    DateTime     @default(now())
+  dispatchedAt DateTime?
+
+  @@index([status, createdAt])
+}
+
+// Request-level idempotency for state-changing API calls (e.g. POST /contributions).
+// Client sends an Idempotency-Key header; the first response is stored and replayed.
+model IdempotencyKey {
+  key        String   @id
+  userId     String?
+  endpoint   String
+  statusCode Int
+  response   Json
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}

@@ -2,6 +2,8 @@
 
 Matches the PRD onboarding (`frontend/app/onboarding`). Custom, because OTP is delivered through **Moolre SMS** and the credential is a 4-digit PIN.
 
+> **State lives in Redis (TTL-based), not Postgres:** `otp:{phone}` (code hash + attempts), `otp:rl:{phone}` (rate-limit), `pin:fail:{userId}` / `pin:lock:{userId}` (lockout), `sess:{userId}:{jti}` (refresh-session for rotation + reuse-detection). Durable identity (`User`, `TrustScore`) stays in Postgres. Implemented in `backend/src/{redis,auth,notifications}`.
+
 ## Flow
 
 1. **Request OTP** — user enters phone (+233, network). Server generates a 6-digit OTP, stores a **hash** with a short TTL, rate-limits per phone/IP, and sends it via Moolre SMS (`moolre-integration` `sendSms`).
@@ -19,6 +21,8 @@ Matches the PRD onboarding (`frontend/app/onboarding`). Custom, because OTP is d
 | `POST /login` | `{ phone, pin }` | session (consider OTP step-up) |
 | `POST /refresh` | — (refresh cookie) | rotates tokens |
 | `POST /logout` | — | clears cookies |
+| `GET /me` | — (access cookie) | current user + `trust` summary (`standing`, `onTimeRate`, `fundsCompleted`) |
+| `PATCH /me` | `{ name }` | update profile (name); returns the `me` shape |
 
 ## Rules & hardening
 

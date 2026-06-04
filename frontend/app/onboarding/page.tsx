@@ -1,8 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ShieldCheck, ArrowRight, Delete } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
+import { ShieldCheck, ArrowRight, Delete, Loader2 } from 'lucide-react'
 import { Logo } from '@/components/logo'
+import { api, ApiError, type Network as ApiNetwork } from '@/lib/api'
 
 type Step = 'phone' | 'otp' | 'pin'
 
@@ -50,7 +53,9 @@ function NumericKeypad({
 }
 
 export default function OnboardingPage() {
+  const router = useRouter()
   const [step, setStep] = useState<Step>('phone')
+  const [busy, setBusy] = useState(false)
 
   // Step 1 — phone
   const [network, setNetwork] = useState<Network>('MTN')
@@ -60,13 +65,71 @@ export default function OnboardingPage() {
   const [otp, setOtp] = useState('')
   const [secondsLeft, setSecondsLeft] = useState(272) // 4:32
 
-  // Step 3 — PIN
+  // Step 3 — PIN (+ optional name)
+  const [name, setName] = useState('')
   const [pin, setPin] = useState('')
   const [confirmPin, setConfirmPin] = useState('')
   const [pinStage, setPinStage] = useState<'create' | 'confirm'>('create')
   const [pinError, setPinError] = useState(false)
 
   const stepIndex = step === 'phone' ? 0 : step === 'otp' ? 1 : 2
+  const fullPhone = `+233${phone.replace(/\D/g, '').slice(0, 9)}`
+
+  async function handleSendCode() {
+    if (busy) return
+    setBusy(true)
+    try {
+      const res = await api.auth.requestOtp(fullPhone, network as ApiNetwork)
+      setOtp('')
+      setSecondsLeft(272)
+      setStep('otp')
+      if (res.devCode) toast.info(`Dev code: ${res.devCode}`, { duration: 60_000 })
+      else toast.success('Code sent by SMS')
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Could not send code')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleVerify() {
+    if (busy || otp.length < 6) return
+    setBusy(true)
+    try {
+      const { registered } = await api.auth.verifyOtp(fullPhone, otp)
+      if (registered) {
+        toast.success('Welcome back!')
+        router.replace('/')
+      } else {
+        setStep('pin')
+      }
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Invalid or expired code')
+      setOtp('')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function submitPin(finalPin: string) {
+    setBusy(true)
+    try {
+      await api.auth.setPin({
+        pin: finalPin,
+        confirmPin: finalPin,
+        network: network as ApiNetwork,
+        name: name.trim() || undefined,
+      })
+      toast.success('Account created')
+      router.replace('/')
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Could not set PIN')
+      setPin('')
+      setConfirmPin('')
+      setPinStage('create')
+      setBusy(false)
+    }
+  }
 
   useEffect(() => {
     if (step !== 'otp' || secondsLeft <= 0) return
@@ -89,27 +152,30 @@ export default function OnboardingPage() {
   const activePin = pinStage === 'create' ? pin : confirmPin
   const setActivePin = pinStage === 'create' ? setPin : setConfirmPin
 
+  // Append with a functional updater so rapid presses accumulate correctly.
   const handlePinPress = (digit: string) => {
     if (pinError) setPinError(false)
-    const next = activePin.length < 4 ? activePin + digit : activePin
-    setActivePin(next)
-    if (next.length === 4) {
-      if (pinStage === 'create') {
-        setTimeout(() => setPinStage('confirm'), 150)
-      } else {
-        if (next === pin) {
-          setTimeout(() => {
-            window.location.href = '/'
-          }, 200)
-        } else {
-          setTimeout(() => {
-            setPinError(true)
-            setConfirmPin('')
-          }, 150)
-        }
-      }
-    }
+    setActivePin((prev) => (prev.length < 4 ? prev + digit : prev))
   }
+
+  // Stage transitions are driven by the committed PIN values (robust to input speed).
+  useEffect(() => {
+    if (pinStage === 'create' && pin.length === 4) {
+      const t = setTimeout(() => setPinStage('confirm'), 150)
+      return () => clearTimeout(t)
+    }
+  }, [pin, pinStage])
+
+  useEffect(() => {
+    if (pinStage !== 'confirm' || confirmPin.length !== 4) return
+    if (confirmPin === pin) {
+      void submitPin(confirmPin)
+    } else {
+      setPinError(true)
+      setConfirmPin('')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [confirmPin, pinStage])
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -183,12 +249,11 @@ export default function OnboardingPage() {
 
                 <button
                   type="button"
-                  onClick={() => setStep('otp')}
-                  disabled={phone.replace(/\D/g, '').length < 9}
+                  onClick={handleSendCode}
+                  disabled={phone.replace(/\D/g, '').length < 9 || busy}
                   className="w-full h-12 rounded-full bg-primary text-primary-foreground font-semibold hover:bg-primary/90 disabled:bg-muted disabled:text-secondary transition-colors flex items-center justify-center gap-2"
                 >
-                  Send code
-                  <ArrowRight className="h-4 w-4" />
+                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Send code <ArrowRight className="h-4 w-4" /></>}
                 </button>
               </div>
             )}
@@ -225,8 +290,9 @@ export default function OnboardingPage() {
                   ) : (
                     <button
                       type="button"
-                      onClick={() => setSecondsLeft(272)}
-                      className="text-primary font-medium hover:underline"
+                      onClick={handleSendCode}
+                      disabled={busy}
+                      className="text-primary font-medium hover:underline disabled:opacity-50"
                     >
                       Resend code
                     </button>
@@ -245,11 +311,11 @@ export default function OnboardingPage() {
 
                 <button
                   type="button"
-                  onClick={() => setStep('pin')}
-                  disabled={otp.length < 6}
-                  className="w-full h-12 rounded-full bg-primary text-primary-foreground font-semibold hover:bg-primary/90 disabled:bg-muted disabled:text-secondary transition-colors"
+                  onClick={handleVerify}
+                  disabled={otp.length < 6 || busy}
+                  className="w-full h-12 rounded-full bg-primary text-primary-foreground font-semibold hover:bg-primary/90 disabled:bg-muted disabled:text-secondary transition-colors flex items-center justify-center"
                 >
-                  Verify &amp; continue
+                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Verify & continue'}
                 </button>
               </div>
             )}
@@ -270,6 +336,21 @@ export default function OnboardingPage() {
                       : 'Enter your PIN again to confirm.'}
                   </p>
                 </div>
+
+                {pinStage === 'create' && (
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-foreground">
+                      What should we call you? <span className="text-secondary font-normal">(optional)</span>
+                    </label>
+                    <input
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="e.g. Ama Asante"
+                      maxLength={80}
+                      className="cp-input"
+                    />
+                  </div>
+                )}
 
                 <div className="flex justify-center gap-4">
                   {Array.from({ length: 4 }).map((_, i) => {
@@ -298,7 +379,7 @@ export default function OnboardingPage() {
                     onPress={handlePinPress}
                     onDelete={() => {
                       if (pinError) setPinError(false)
-                      setActivePin(activePin.slice(0, -1))
+                      setActivePin((prev) => prev.slice(0, -1))
                     }}
                   />
                 </div>

@@ -83,6 +83,12 @@ enum MemberRole {
   admin
 }
 
+enum InviteStatus {
+  pending
+  accepted
+  expired
+}
+
 enum MedicalPayoutRoute {
   hospital_momo
   hospital_bank
@@ -124,7 +130,7 @@ enum TrustStanding {
 
 model User {
   id            String         @id @default(cuid())
-  name          String
+  name          String?        // optional — phone onboarding doesn't collect a name
   phone         String         @unique
   network       Network
   location      String?
@@ -140,17 +146,8 @@ model User {
   createdFunds  Fund[]         @relation("FundCreator")
 }
 
-model OtpRequest {
-  id         String    @id @default(cuid())
-  phone      String
-  codeHash   String
-  expiresAt  DateTime
-  attempts   Int       @default(0)
-  consumedAt DateTime?
-  createdAt  DateTime  @default(now())
-
-  @@index([phone])
-}
+// OTP / rate-limit / lockout / refresh-sessions live in Redis (TTL-based), not Postgres.
+// See references/auth.md.
 
 model Fund {
   id          String            @id @default(cuid())
@@ -167,6 +164,7 @@ model Fund {
   contributions Contribution[]
   payouts     Payout[]
   contributors Contributor[]
+  invites     Invite[]
 }
 
 model SusuDetail {
@@ -181,6 +179,8 @@ model SusuDetail {
   depositAmount   Int         @default(0) // pesewas
   currentCycle Int            @default(1)
   totalCycles  Int            // == memberCount
+  startedAt    DateTime?      // set when the fund fills — locks members + payout order (E5)
+  payoutOrder  Json?          // locked userId[] (who is paid in which cycle)
 }
 
 model FundraiserDetail {
@@ -249,10 +249,24 @@ model Member {
   status       MemberStatus     @default(pending)
   fundStatus   MemberFundStatus @default(active)
   depositPaid  Boolean          @default(false)
+  joinedAt     DateTime         @default(now()) // deterministic join order for payout sequencing
   paidAt       DateTime?
   dueAt        DateTime?
 
   @@unique([fundId, userId])
+  @@index([fundId])
+}
+
+model Invite {
+  id        String       @id @default(cuid())
+  fundId    String
+  fund      Fund         @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  phone     String
+  token     String       @unique @default(cuid())
+  status    InviteStatus @default(pending)
+  createdAt DateTime     @default(now())
+
+  @@unique([fundId, phone])
   @@index([fundId])
 }
 
@@ -284,6 +298,8 @@ model Contribution {
   transactionId String?
   reference     String?
   ts            DateTime @default(now())
+  settledAt     DateTime?
+  receiptSentAt DateTime? // SMS-receipt idempotency (E4)
 
   @@index([fundId, status])
 }
@@ -301,6 +317,7 @@ model Payout {
   status        TxStatus @default(initiated)
   transactionId String?
   ts            DateTime @default(now())
+  settledAt     DateTime?
 
   @@index([fundId, status])
 }
@@ -317,13 +334,15 @@ model Contributor {
 }
 
 model TrustScore {
-  userId         String        @id
-  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  segmentsFilled Int           @default(0)
-  standing       TrustStanding @default(new_)
-  fundsCompleted Int           @default(0)
-  onTimeRate     Int           @default(100) // 0-100
-  activeFunds    Int           @default(0)
+  userId              String        @id
+  user                User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  segmentsFilled      Int           @default(0)
+  standing            TrustStanding @default(new_)
+  fundsCompleted      Int           @default(0)
+  onTimeRate          Int           @default(100) // 0-100, derived from the counters below
+  activeFunds         Int           @default(0)
+  contributionsTotal  Int           @default(0) // settled contributions counted toward on-time rate
+  contributionsOnTime Int           @default(0) // of those, paid on/before the due date
 }
 
 model ActivityItem {

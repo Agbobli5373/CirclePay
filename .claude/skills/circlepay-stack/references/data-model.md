@@ -5,18 +5,19 @@ Maps the `circlepay-domain` entities to tables. Full starter in `assets/schema.p
 ## Tables (summary)
 
 - **User** — `id`, `name`, `phone` (unique), `network`, `location?`, `language` (`en|tw|ga`), `isOpsAdmin` (platform ops), `pinHash`, timestamps. 1—1 `TrustScore`. 1—* `Member`, `Contribution`, `Payout`.
-- **OtpRequest** — `id`, `phone`, `codeHash`, `expiresAt`, `attempts`, `consumedAt?`. For the auth flow (short-lived).
+- **Ephemeral auth state (Redis, not Postgres):** OTP codes, OTP rate-limit, failed-PIN lockout, and refresh-sessions (with reuse-detection) all live in Redis with TTLs (`otp:*`, `otp:rl:*`, `pin:fail:*`, `pin:lock:*`, `sess:{userId}:{jti}`). See `references/auth.md`.
 - **Fund** — `id`, `name`, `type` (`Susu|Medical|Education|Business`), `status`, `createdById`, timestamps. Type-specific columns nullable, or split:
-  - **SusuDetail** (1—1 with Fund where type=Susu) — `contribution` (Int), `frequency`, `memberCount`, `startDate`, `payoutRule` (`rotating|random|trust_ordered`), `requiresDeposit`/`depositAmount` (Int, shortfall protection), `currentCycle`, `totalCycles`.
+  - **SusuDetail** (1—1 with Fund where type=Susu) — `contribution` (Int), `frequency`, `memberCount`, `startDate`, `payoutRule` (`rotating|random|trust_ordered`), `requiresDeposit`/`depositAmount` (Int, shortfall protection), `currentCycle`, `totalCycles`, `startedAt?` (set when the fund fills — locks members + order), `payoutOrder?` (Json: locked `userId[]`, resolved at start incl. the random shuffle). *(`requiresDeposit=true` is currently rejected at create — deposit collection deferred.)*
   - **FundraiserDetail** (1—1 where type≠Susu) — `goal` (Int), `raised` (Int), `beneficiary`, `hospital?`, `hospitalVerified`, `story?`, `deadline?`, `shareable`, `slug` (unique, public page), **payout routing**: `payoutRoute` (`hospital_momo|hospital_bank|individual_cash`), `payeeName/Momo/Bank/Relation`, `verificationStatus`, `requiresReceipts`, `firstTrancheCap?`/`totalCap?`. Has many `PayoutTranche`, `Receipt`. See `circlepay-domain/references/medical-payouts.md`.
 - **PayoutTranche** — `id`, `fundId`, `amount` (Int), `status` (`held|released|settled|refunded`), `receiptId?`, `externalref?` (**unique**), `releasedAt?`. Escrow released in receipt-gated stages.
 - **Receipt** — `id`, `fundId`, `trancheId?`, `kind` (`proforma|receipt`), `docUrl`, `uploadedBy`, `status` (`submitted|verified|rejected`), `verifiedBy?`, `ts`. Proof-of-use for cash payouts.
 - **Member** — `id`, `fundId`, `userId`, `role` (`member|admin`, fund-scoped), `trustTag?`, `status` (`paid|pending|overdue`), `fundStatus` (`active|grace|defaulted|left|completed`), `depositPaid`, `paidAt?`, `dueAt?`. Unique (`fundId`,`userId`).
 - **Cycle** — `id`, `fundId`, `index`, `payeeUserId`, `amount` (Int pot), `status` (`completed|current|upcoming`). Unique (`fundId`,`index`).
-- **Contribution** — `id`, `fundId`, `userId`, `cycle?`, `amount`, `fee`, `total` (Int), `network`, `externalref` (**unique**), `status` (`initiated|settled|failed`), `transactionId?`, `reference?`, `ts`.
-- **Payout** — `id`, `fundId`, `cycle?`, `payeeUserId?`, `hospital?`, `amount` (Int), `externalref` (**unique**), `status`, `transactionId?`, `ts`.
+- **Contribution** — `id`, `fundId`, `userId`, `cycle?`, `amount`, `fee`, `total` (Int), `network`, `externalref` (**unique**), `status` (`initiated|settled|failed`), `transactionId?`, `reference?`, `ts`, `settledAt?`, `receiptSentAt?` (SMS-receipt idempotency).
+- **Payout** — `id`, `fundId`, `cycle?`, `payeeUserId?`, `hospital?`, `amount` (Int), `externalref` (**unique**), `status`, `transactionId?`, `ts`, `settledAt?`.
+- **Invite** — `id`, `fundId`, `phone`, `token` (**unique**, shareable), `status` (`pending|accepted|expired`), `createdAt`. Unique (`fundId`,`phone`). Backs **invite-only** Susu join via `/join/<token>`.
 - **Contributor** — `id`, `fundId`, `displayName`, `amount` (Int), `anonymous`, `userId?`, `ts`.
-- **TrustScore** — `userId` (1—1), `segmentsFilled`, `standing` (`new|building|good|excellent|locked`), `fundsCompleted`, `onTimeRate`, `activeFunds`.
+- **TrustScore** — `userId` (1—1), `segmentsFilled`, `standing` (`new|building|good|excellent|locked`), `fundsCompleted`, `onTimeRate`, `activeFunds`, `contributionsTotal`/`contributionsOnTime` (drive `onTimeRate = round(onTime/total·100)`, updated per settled contribution).
 - **ActivityItem** — `id`, `userId`, `type` (`contribution|payout|donation|joined`), `title`, `detail`, `amount?`, `direction?`, `reference?`, `createdAt`. (UX feed, **not** accounting.)
 
 ### Ledger (double-entry, append-only) — see `circlepay-domain/references/ledger.md`

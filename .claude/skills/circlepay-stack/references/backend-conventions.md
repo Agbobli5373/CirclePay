@@ -13,7 +13,8 @@ Use the **`nestjs-expert`** skill for idiomatic module/DI/testing detail. This d
 | `fundraisers` | Goal funds + **payout routing**: route selection, payee verification (Moolre name-match + ops), escrow **tranche release** (gated by verified receipts, `canReleaseNextTranche`), receipt upload/verify, donor-visible status; emits `PayeeVerified`/`TrancheReleased`/`ReceiptSubmitted`/`MedicalFundRefunded` via the outbox |
 | `contributions` | collect (Moolre), settlement state |
 | `payouts` | disbursement (Moolre transfer), reconciliation |
-| `trust` | scoring + platform-wide defaulter lock |
+| `trust` | scoring + platform-wide defaulter lock + the default-lifecycle **scheduler** (overdue/grace/default sweep) + appeal unlock (`POST /trust/:userId/unlock`, ops) |
+| `activity` | activity feed read API (`GET /activity`) over `ActivityItem` |
 | `notifications` | SMS (receipts, alerts, reminders) via Moolre |
 | `moolre` | wraps the framework-agnostic `MoolreClient` (`moolre-integration`) |
 | `webhooks` | `POST /webhooks/moolre/:secret` → verify → reconcile |
@@ -43,9 +44,11 @@ Use the **`nestjs-expert`** skill for idiomatic module/DI/testing detail. This d
 
 ## Scheduled jobs — `@nestjs/schedule`
 
-- **Payout disbursement:** when a Susu cycle is funded, transfer the pot (idempotent on `externalref`).
-- **Reconciliation:** poll Moolre `/transact/status` for contributions/payouts still pending after N minutes (webhook backstop).
-- **Reminders:** SMS members with `pending`/`overdue` contributions before due dates.
+All sweeps are **single-flight** via a Postgres advisory lock (`LockService`, exported from the outbox module) so only one instance runs a batch.
+
+- **Outbox dispatcher** (`outbox`, every 5s): delivers `OutboxEvent`s to handlers (incl. `CycleFunded` → disburse, `PayoutSettled` → settle+advance). Implemented.
+- **Trust sweep** (`trust`, every 30s): drives members `pending → overdue → grace → defaulted` off each member's `dueAt` (grace window = `GRACE_HOURS`, default 48h); SMS nudges; on default sets `TrustStanding=locked` **platform-wide**. Implemented (shortfall coverage from deposit/safety-pool is deferred).
+- **Reconciliation** (backstop, *deferred*): poll Moolre `/open/transact/status` for contributions/payouts still `initiated` after N minutes, and read the real `moolre_fee`. Not yet built.
 
 ## Money & settlement (ledger + outbox)
 
