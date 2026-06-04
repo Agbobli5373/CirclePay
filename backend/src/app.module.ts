@@ -11,6 +11,7 @@ import { AuthModule } from './auth/auth.module'
 import { FundsModule } from './funds/funds.module'
 import { ContributionsModule } from './contributions/contributions.module'
 import { PayoutsModule } from './payouts/payouts.module'
+import { ActivityModule } from './activity/activity.module'
 import { HealthModule } from './health/health.module'
 
 @Module({
@@ -26,6 +27,7 @@ import { HealthModule } from './health/health.module'
     FundsModule,
     ContributionsModule,
     PayoutsModule,
+    ActivityModule,
     WebhooksModule,
     HealthModule,
   ],

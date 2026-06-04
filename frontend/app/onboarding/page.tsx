@@ -146,25 +146,30 @@ export default function OnboardingPage() {
   const activePin = pinStage === 'create' ? pin : confirmPin
   const setActivePin = pinStage === 'create' ? setPin : setConfirmPin
 
+  // Append with a functional updater so rapid presses accumulate correctly.
   const handlePinPress = (digit: string) => {
     if (pinError) setPinError(false)
-    const next = activePin.length < 4 ? activePin + digit : activePin
-    setActivePin(next)
-    if (next.length === 4) {
-      if (pinStage === 'create') {
-        setTimeout(() => setPinStage('confirm'), 150)
-      } else {
-        if (next === pin) {
-          void submitPin(next)
-        } else {
-          setTimeout(() => {
-            setPinError(true)
-            setConfirmPin('')
-          }, 150)
-        }
-      }
-    }
+    setActivePin((prev) => (prev.length < 4 ? prev + digit : prev))
   }
+
+  // Stage transitions are driven by the committed PIN values (robust to input speed).
+  useEffect(() => {
+    if (pinStage === 'create' && pin.length === 4) {
+      const t = setTimeout(() => setPinStage('confirm'), 150)
+      return () => clearTimeout(t)
+    }
+  }, [pin, pinStage])
+
+  useEffect(() => {
+    if (pinStage !== 'confirm' || confirmPin.length !== 4) return
+    if (confirmPin === pin) {
+      void submitPin(confirmPin)
+    } else {
+      setPinError(true)
+      setConfirmPin('')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [confirmPin, pinStage])
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -353,7 +358,7 @@ export default function OnboardingPage() {
                     onPress={handlePinPress}
                     onDelete={() => {
                       if (pinError) setPinError(false)
-                      setActivePin(activePin.slice(0, -1))
+                      setActivePin((prev) => prev.slice(0, -1))
                     }}
                   />
                 </div>

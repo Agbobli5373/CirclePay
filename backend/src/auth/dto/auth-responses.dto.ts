@@ -27,6 +27,9 @@ class TrustSummaryDto {
 
   @ApiProperty({ example: 100, description: 'On-time contribution rate (0–100).' })
   onTimeRate!: number
+
+  @ApiProperty({ example: 0, description: 'Number of Susu funds completed.' })
+  fundsCompleted!: number
 }
 
 /** Current authenticated user (GET /auth/me). */

@@ -7,6 +7,7 @@ export const qk = {
   me: ['me'] as const,
   funds: (scope: string) => ['funds', scope] as const,
   fund: (id: string) => ['fund', id] as const,
+  activity: ['activity'] as const,
 }
 
 export function useMe(enabled = true) {
@@ -19,6 +20,10 @@ export function useFunds(scope: 'mine' | 'all' = 'mine') {
 
 export function useFund(id: string) {
   return useQuery({ queryKey: qk.fund(id), queryFn: () => api.funds.detail(id), enabled: !!id })
+}
+
+export function useActivity() {
+  return useQuery({ queryKey: qk.activity, queryFn: api.activity.list })
 }
 
 export function useCreateFund() {

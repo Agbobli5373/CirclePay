@@ -66,7 +66,7 @@ export interface Me {
   network: Network
   language: string
   isOpsAdmin: boolean
-  trust: { standing: string; onTimeRate: number } | null
+  trust: { standing: string; onTimeRate: number; fundsCompleted: number } | null
 }
 
 export interface FundSummary {
@@ -103,6 +103,17 @@ export interface FundDetail extends FundSummary {
   started: boolean
   currentPayeeUserId: string | null
   currentCyclePayoutStatus: string
+}
+
+export interface ActivityItem {
+  id: string
+  type: 'contribution' | 'payout' | 'donation' | 'joined'
+  title: string
+  detail: string
+  amount: number | null
+  direction: 'in' | 'out' | null
+  reference: string | null
+  createdAt: string
 }
 
 export type ContributionState = 'otp_required' | 'initiated' | 'settled' | 'failed'
@@ -175,5 +186,8 @@ export const api = {
       }),
     status: (externalref: string) =>
       request<ContributionStatus>(`/contributions/${encodeURIComponent(externalref)}`),
+  },
+  activity: {
+    list: () => request<ActivityItem[]>('/activity'),
   },
 }

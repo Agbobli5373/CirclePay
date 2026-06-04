@@ -22,6 +22,7 @@ const FEATURES = [
   'fundraisers',
   'contributions',
   'payouts',
+  'activity',
   'trust',
 ]
 

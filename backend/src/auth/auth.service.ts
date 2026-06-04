@@ -162,7 +162,11 @@ export class AuthService {
       language: user.language,
       isOpsAdmin: user.isOpsAdmin,
       trust: user.trustScore
-        ? { standing: user.trustScore.standing, onTimeRate: user.trustScore.onTimeRate }
+        ? {
+            standing: user.trustScore.standing,
+            onTimeRate: user.trustScore.onTimeRate,
+            fundsCompleted: user.trustScore.fundsCompleted,
+          }
         : null,
     }
   }
