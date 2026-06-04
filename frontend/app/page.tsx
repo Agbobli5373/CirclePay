@@ -1,6 +1,10 @@
+'use client'
+
 import Link from 'next/link'
 import { AppShell } from '@/components/app-shell'
-import { TrendingUp, Plus, Sparkles, ArrowUpRight, ArrowDownLeft } from 'lucide-react'
+import { TrendingUp, Plus, Sparkles, ArrowUpRight, ArrowDownLeft, Loader2 } from 'lucide-react'
+import { formatGhs } from '@circlepay/shared'
+import { useMe, useFunds } from '@/lib/queries'
 
 const contributions = [
   { month: 'Jan', value: 600 },
@@ -40,12 +44,17 @@ function ContributionsChart() {
 }
 
 export default function Home() {
+  const { data: me } = useMe()
+  const { data: funds, isLoading: fundsLoading } = useFunds('mine')
+  const firstName = me?.name?.trim()?.split(/\s+/)[0] || me?.phone || 'there'
+  const activeCount = funds?.length ?? 0
+
   return (
     <AppShell currentPage="home">
       <div className="space-y-8">
         {/* Greeting */}
         <div>
-          <h2 className="text-2xl lg:text-3xl font-bold text-foreground tracking-tight">Akwaaba, Ama</h2>
+          <h2 className="text-2xl lg:text-3xl font-bold text-foreground tracking-tight">Akwaaba, {firstName}</h2>
           <p className="text-sm text-secondary mt-1.5">Here&apos;s how your funds are doing</p>
         </div>
 
@@ -62,7 +71,7 @@ export default function Home() {
 
             <div className="grid grid-cols-3 gap-4 mt-7 pt-6 border-t border-white/20">
               <div>
-                <p className="text-2xl font-bold tracking-tight">3</p>
+                <p className="text-2xl font-bold tracking-tight">{activeCount}</p>
                 <p className="text-xs text-white/70 mt-1">Active funds</p>
               </div>
               <div>
@@ -117,38 +126,30 @@ export default function Home() {
               <Link href="/funds" className="text-xs text-primary font-medium hover:underline">View all</Link>
             </div>
             <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
-              <FundCard
-                href="/funds/kumasi-traders"
-                name="Kumasi Traders"
-                type="Susu"
-                typeClass="bg-primary/15 text-primary"
-                meta="10 members"
-                amount="GHS 500/month"
-                progressLabel="Cycle 3 of 10"
-                percent={30}
-                note="Your payout in 4 cycles · GHS 5,000"
-              />
-              <FundCard
-                href="/funds/kofi-mensah"
-                name="Kofi's Surgery"
-                type="Medical"
-                typeClass="bg-destructive/15 text-destructive"
-                meta="32 contributors"
-                amount="GHS 3,200 raised"
-                progressLabel="64%"
-                percent={64}
-                note="Goal: GHS 5,000 · 2 days left"
-              />
-              <FundCard
-                name="Ama's School Fund"
-                type="Education"
-                typeClass="bg-amber-500/15 text-amber-600"
-                meta="5 supporters"
-                amount="GHS 2,400 saved"
-                progressLabel="48%"
-                percent={48}
-                note="Goal: GHS 5,000 · For school fees"
-              />
+              {fundsLoading && (
+                <div className="col-span-full flex items-center justify-center py-8">
+                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                </div>
+              )}
+              {!fundsLoading &&
+                (funds ?? []).map((f) => (
+                  <FundCard
+                    key={f.id}
+                    href={`/funds/${f.id}`}
+                    name={f.name}
+                    type={f.type}
+                    typeClass="bg-primary/15 text-primary"
+                    meta={`${f.memberCount} members`}
+                    amount={`${formatGhs(f.contribution)}/${f.frequency === 'weekly' ? 'wk' : 'mo'}`}
+                    progressLabel={`Cycle ${f.currentCycle} of ${f.totalCycles}`}
+                    percent={f.progressPercent}
+                    note={
+                      f.myNextPayoutCycle != null
+                        ? `Your turn: cycle ${f.myNextPayoutCycle} · ${formatGhs(f.potPesewas)}`
+                        : `Pot ${formatGhs(f.potPesewas)} each cycle`
+                    }
+                  />
+                ))}
 
               {/* Quiet create tile */}
               <Link

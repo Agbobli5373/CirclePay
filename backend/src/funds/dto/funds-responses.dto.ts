@@ -57,6 +57,9 @@ export class MemberDto {
   @ApiProperty({ example: 'active', enum: ['active', 'grace', 'defaulted', 'left', 'completed'] })
   fundStatus!: string
 
+  @ApiProperty({ example: 'pending', enum: ['paid', 'pending', 'overdue'], description: 'Current-cycle payment status.' })
+  status!: string
+
   @ApiProperty({ example: false })
   depositPaid!: boolean
 

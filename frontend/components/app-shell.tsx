@@ -1,9 +1,26 @@
 'use client'
 
-import { Home, Wallet, Users, ActivitySquare, User, Bell, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Home, Wallet, Users, ActivitySquare, User, Bell, ChevronLeft, ChevronRight, LogOut, Loader2 } from 'lucide-react'
 import { Logo, LogoMark } from './logo'
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useMe, useLogout } from '@/lib/queries'
+
+const STANDING_LABEL: Record<string, string> = {
+  new_: 'New member',
+  building: 'Building trust',
+  good: 'Good standing',
+  excellent: 'Excellent standing',
+  locked: 'Locked',
+}
+
+function initialsOf(name: string | null, phone: string): string {
+  if (name && name.trim()) {
+    return name.trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()
+  }
+  return phone.slice(-2)
+}
 
 interface AppShellProps {
   children: React.ReactNode
@@ -21,6 +38,31 @@ const navItems = [
 
 export function AppShell({ children, currentPage = 'home' }: AppShellProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+  const router = useRouter()
+  const { data: me, isLoading, isError } = useMe()
+  const logout = useLogout()
+
+  // Client-side auth gate (session cookie lives on the API origin, so middleware can't see it).
+  useEffect(() => {
+    if (isError) router.replace('/onboarding')
+  }, [isError, router])
+
+  if (isLoading || !me) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      </div>
+    )
+  }
+
+  const initials = initialsOf(me.name, me.phone)
+  const displayName = me.name?.trim() || me.phone
+  const standing = STANDING_LABEL[me.trust?.standing ?? 'new_'] ?? 'Member'
+
+  async function handleLogout() {
+    await logout.mutateAsync().catch(() => undefined)
+    router.replace('/onboarding')
+  }
 
   return (
     <div className="min-h-screen bg-background lg:flex">
@@ -86,12 +128,12 @@ export function AppShell({ children, currentPage = 'home' }: AppShellProps) {
                 className={`flex items-center gap-3 rounded-2xl p-2 hover:bg-muted transition-colors ${!isSidebarOpen && 'justify-center'}`}
               >
                 <div className="h-9 w-9 rounded-full bg-primary flex items-center justify-center text-xs font-bold text-primary-foreground flex-shrink-0">
-                  AA
+                  {initials}
                 </div>
                 {isSidebarOpen && (
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-foreground truncate">Ama Asante</p>
-                    <p className="text-xs text-secondary">Good standing</p>
+                    <p className="text-sm font-semibold text-foreground truncate">{displayName}</p>
+                    <p className="text-xs text-secondary">{standing}</p>
                   </div>
                 )}
               </a>
@@ -102,7 +144,7 @@ export function AppShell({ children, currentPage = 'home' }: AppShellProps) {
             return (
               <Tooltip>
                 <TooltipTrigger asChild>{account}</TooltipTrigger>
-                <TooltipContent side="right">Ama Asante · Profile</TooltipContent>
+                <TooltipContent side="right">{displayName} · Profile</TooltipContent>
               </Tooltip>
             )
           })()}
@@ -112,10 +154,17 @@ export function AppShell({ children, currentPage = 'home' }: AppShellProps) {
       {/* Main column */}
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Desktop top bar */}
-        <header className="sticky top-0 z-40 hidden lg:flex items-center justify-end h-16 px-6 border-b border-border bg-background">
+        <header className="sticky top-0 z-40 hidden lg:flex items-center justify-end gap-1 h-16 px-6 border-b border-border bg-background">
           <button className="relative p-2 text-secondary hover:text-foreground hover:bg-muted rounded-full transition-colors">
             <Bell className="h-5 w-5" />
             <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive" />
+          </button>
+          <button
+            onClick={handleLogout}
+            title="Log out"
+            className="p-2 text-secondary hover:text-destructive hover:bg-muted rounded-full transition-colors"
+          >
+            <LogOut className="h-5 w-5" />
           </button>
         </header>
 

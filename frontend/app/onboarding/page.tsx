@@ -1,8 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ShieldCheck, ArrowRight, Delete } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
+import { ShieldCheck, ArrowRight, Delete, Loader2 } from 'lucide-react'
 import { Logo } from '@/components/logo'
+import { api, ApiError, type Network as ApiNetwork } from '@/lib/api'
 
 type Step = 'phone' | 'otp' | 'pin'
 
@@ -50,7 +53,9 @@ function NumericKeypad({
 }
 
 export default function OnboardingPage() {
+  const router = useRouter()
   const [step, setStep] = useState<Step>('phone')
+  const [busy, setBusy] = useState(false)
 
   // Step 1 — phone
   const [network, setNetwork] = useState<Network>('MTN')
@@ -67,6 +72,58 @@ export default function OnboardingPage() {
   const [pinError, setPinError] = useState(false)
 
   const stepIndex = step === 'phone' ? 0 : step === 'otp' ? 1 : 2
+  const fullPhone = `+233${phone.replace(/\D/g, '').slice(0, 9)}`
+
+  async function handleSendCode() {
+    if (busy) return
+    setBusy(true)
+    try {
+      const res = await api.auth.requestOtp(fullPhone, network as ApiNetwork)
+      setOtp('')
+      setSecondsLeft(272)
+      setStep('otp')
+      if (res.devCode) toast.info(`Dev code: ${res.devCode}`, { duration: 60_000 })
+      else toast.success('Code sent by SMS')
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Could not send code')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleVerify() {
+    if (busy || otp.length < 6) return
+    setBusy(true)
+    try {
+      const { registered } = await api.auth.verifyOtp(fullPhone, otp)
+      if (registered) {
+        toast.success('Welcome back!')
+        router.replace('/')
+      } else {
+        setStep('pin')
+      }
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Invalid or expired code')
+      setOtp('')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function submitPin(finalPin: string) {
+    setBusy(true)
+    try {
+      await api.auth.setPin({ pin: finalPin, confirmPin: finalPin, network: network as ApiNetwork })
+      toast.success('Account created')
+      router.replace('/')
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Could not set PIN')
+      setPin('')
+      setConfirmPin('')
+      setPinStage('create')
+      setBusy(false)
+    }
+  }
 
   useEffect(() => {
     if (step !== 'otp' || secondsLeft <= 0) return
@@ -98,9 +155,7 @@ export default function OnboardingPage() {
         setTimeout(() => setPinStage('confirm'), 150)
       } else {
         if (next === pin) {
-          setTimeout(() => {
-            window.location.href = '/'
-          }, 200)
+          void submitPin(next)
         } else {
           setTimeout(() => {
             setPinError(true)
@@ -183,12 +238,11 @@ export default function OnboardingPage() {
 
                 <button
                   type="button"
-                  onClick={() => setStep('otp')}
-                  disabled={phone.replace(/\D/g, '').length < 9}
+                  onClick={handleSendCode}
+                  disabled={phone.replace(/\D/g, '').length < 9 || busy}
                   className="w-full h-12 rounded-full bg-primary text-primary-foreground font-semibold hover:bg-primary/90 disabled:bg-muted disabled:text-secondary transition-colors flex items-center justify-center gap-2"
                 >
-                  Send code
-                  <ArrowRight className="h-4 w-4" />
+                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Send code <ArrowRight className="h-4 w-4" /></>}
                 </button>
               </div>
             )}
@@ -225,8 +279,9 @@ export default function OnboardingPage() {
                   ) : (
                     <button
                       type="button"
-                      onClick={() => setSecondsLeft(272)}
-                      className="text-primary font-medium hover:underline"
+                      onClick={handleSendCode}
+                      disabled={busy}
+                      className="text-primary font-medium hover:underline disabled:opacity-50"
                     >
                       Resend code
                     </button>
@@ -245,11 +300,11 @@ export default function OnboardingPage() {
 
                 <button
                   type="button"
-                  onClick={() => setStep('pin')}
-                  disabled={otp.length < 6}
-                  className="w-full h-12 rounded-full bg-primary text-primary-foreground font-semibold hover:bg-primary/90 disabled:bg-muted disabled:text-secondary transition-colors"
+                  onClick={handleVerify}
+                  disabled={otp.length < 6 || busy}
+                  className="w-full h-12 rounded-full bg-primary text-primary-foreground font-semibold hover:bg-primary/90 disabled:bg-muted disabled:text-secondary transition-colors flex items-center justify-center"
                 >
-                  Verify &amp; continue
+                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Verify & continue'}
                 </button>
               </div>
             )}

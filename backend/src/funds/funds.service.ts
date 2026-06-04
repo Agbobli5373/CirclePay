@@ -280,6 +280,7 @@ export class FundsService {
       name: m.user.name,
       role: m.role,
       fundStatus: m.fundStatus,
+      status: m.status,
       depositPaid: m.depositPaid,
       trustStanding: m.user.trustScore?.standing ?? 'new_',
       payoutPosition: position.get(m.userId) ?? 0,
