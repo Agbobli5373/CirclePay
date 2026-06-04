@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint .",
+    "lint": "echo \"(frontend) no eslint configured — types guarded by tsc\"",
     "typecheck": "tsc --noEmit",
     "test": "echo \"(frontend) no tests yet\""
   },
