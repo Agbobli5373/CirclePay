@@ -59,6 +59,11 @@ function isSusuStarted(susu: { startedAt: Date | null }): boolean {
   return !!susu.startedAt
 }
 
+/** Contribution window per cadence (ms). */
+function cycleIntervalMs(frequency: string): number {
+  return (frequency === 'weekly' ? 7 : 30) * 24 * 60 * 60 * 1000
+}
+
 @Injectable()
 export class FundsService {
   private readonly logger = new Logger(FundsService.name)
@@ -73,6 +78,10 @@ export class FundsService {
 
   async createSusu(userId: string, dto: CreateFundDto): Promise<FundSummaryDto> {
     await this.assertCanJoin(userId)
+    if (dto.requiresDeposit) {
+      // Deposit collection + shortfall coverage are a later phase — don't let a member dead-end.
+      throw new BadRequestException({ code: 'DEPOSIT_NOT_SUPPORTED', message: 'Deposit-required Susu are coming soon' })
+    }
 
     const fund = await this.db.$transaction(async (tx) => {
       const created = await tx.fund.create({
@@ -239,6 +248,11 @@ export class FundsService {
           where: { fundId },
           data: { startedAt: new Date(), payoutOrder: order },
         })
+        // Set the cycle-1 contribution due date for every member (cadence-driven).
+        await tx.member.updateMany({
+          where: { fundId, fundStatus: 'active' },
+          data: { dueAt: new Date(Date.now() + cycleIntervalMs(fund.susu.frequency)) },
+        })
       }
 
       if (requiresDeposit) {
@@ -248,6 +262,47 @@ export class FundsService {
       }
       return { status: 'active' }
     })
+  }
+
+  /** Accept an invite by its token (invite-only join). Verifies the token belongs to the user's number. */
+  async acceptInvite(userId: string, token: string): Promise<JoinResultDto & { fundId: string }> {
+    const user = await this.db.user.findUnique({ where: { id: userId } })
+    if (!user) throw new NotFoundException({ code: 'NOT_FOUND', message: 'User not found' })
+
+    const invite = await this.db.invite.findUnique({ where: { token } })
+    if (!invite || invite.status === 'expired') {
+      throw new NotFoundException({ code: 'INVITE_INVALID', message: 'This invite link is invalid or has expired' })
+    }
+    if (invite.phone !== user.phone) {
+      throw new ForbiddenException({
+        code: 'INVITE_PHONE_MISMATCH',
+        message: 'This invite was sent to a different MoMo number',
+      })
+    }
+
+    const existing = await this.db.member.findUnique({
+      where: { fundId_userId: { fundId: invite.fundId, userId } },
+    })
+    if (existing) return { status: 'active', fundId: invite.fundId } // idempotent
+
+    const result = await this.join(userId, invite.fundId)
+    return { ...result, fundId: invite.fundId }
+  }
+
+  /** DEV ONLY: backdate the caller's current-cycle due date to trigger overdue/default in a demo. */
+  async devExpire(userId: string, fundId: string, mode: 'overdue' | 'default'): Promise<{ ok: true }> {
+    const graceHours = Number(this.config.get<string>('GRACE_HOURS') ?? 48)
+    const dueAt =
+      mode === 'default'
+        ? new Date(Date.now() - (graceHours + 1) * 60 * 60 * 1000)
+        : new Date(Date.now() - 60 * 1000)
+    const member = await this.db.member.findUnique({ where: { fundId_userId: { fundId, userId } } })
+    if (!member) throw new NotFoundException({ code: 'NOT_MEMBER', message: 'Not a member of this fund' })
+    await this.db.member.update({
+      where: { id: member.id },
+      data: { dueAt, status: 'pending', fundStatus: 'active' },
+    })
+    return { ok: true }
   }
 
   // ---------- read ----------

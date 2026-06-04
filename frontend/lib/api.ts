@@ -186,8 +186,11 @@ export const api = {
     detail: (id: string) => request<FundDetail>(`/funds/${id}`),
     invite: (id: string, phones: string[]) =>
       request<{ invited: number }>(`/funds/${id}/invites`, { method: 'POST', body: { phones } }),
-    join: (id: string) =>
-      request<{ status: string; depositAmount?: number }>(`/funds/${id}/join`, { method: 'POST' }),
+    acceptInvite: (token: string) =>
+      request<{ status: string; fundId?: string; depositAmount?: number }>(
+        `/funds/join/${encodeURIComponent(token)}`,
+        { method: 'POST' },
+      ),
   },
   contributions: {
     initiate: (fundId: string, idempotencyKey: string, otpcode?: string) =>

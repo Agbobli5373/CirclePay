@@ -8,6 +8,6 @@ import { LockService } from './lock.service'
 @Module({
   imports: [ScheduleModule.forRoot()],
   providers: [OutboxService, OutboxDispatcher, LockService],
-  exports: [OutboxService, OutboxDispatcher],
+  exports: [OutboxService, OutboxDispatcher, LockService],
 })
 export class OutboxModule {}

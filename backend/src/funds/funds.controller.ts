@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, NotFoundException, Param, Post, UseGuards } from '@nestjs/common'
 import {
   ApiTags,
   ApiCookieAuth,
@@ -9,7 +9,7 @@ import {
   ApiNotFoundResponse,
   ApiConflictResponse,
   ApiBadRequestResponse,
-  ApiQuery,
+  ApiExcludeEndpoint,
 } from '@nestjs/swagger'
 import { JwtAuthGuard } from '../common/auth/jwt-auth.guard'
 import { CurrentUser } from '../common/auth/current-user.decorator'
@@ -49,23 +49,28 @@ export class FundsController {
     return this.funds.invite(user.id, id, dto)
   }
 
-  @Post(':id/join')
-  @ApiOperation({ summary: 'Join a Susu (active immediately, or pending a required deposit)' })
+  @Post('join/:token')
+  @ApiOperation({ summary: 'Accept a Susu invite by token (invite-only join)' })
   @ApiOkResponse({ type: JoinResultDto })
-  @ApiForbiddenResponse({ description: 'TRUST_LOCKED / FORBIDDEN' })
-  @ApiConflictResponse({ description: 'FUND_FULL / ALREADY_MEMBER / FUND_INACTIVE' })
-  @ApiNotFoundResponse({ description: 'NOT_FOUND — fund does not exist' })
-  join(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.funds.join(user.id, id)
+  @ApiForbiddenResponse({ description: 'TRUST_LOCKED / INVITE_PHONE_MISMATCH' })
+  @ApiConflictResponse({ description: 'FUND_FULL / FUND_INACTIVE' })
+  @ApiNotFoundResponse({ description: 'INVITE_INVALID — bad or expired invite link' })
+  acceptInvite(@CurrentUser() user: AuthUser, @Param('token') token: string) {
+    return this.funds.acceptInvite(user.id, token)
+  }
+
+  @Post(':id/dev/expire')
+  @ApiExcludeEndpoint() // dev-only demo affordance
+  devExpire(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: { mode?: 'overdue' | 'default' }) {
+    if (process.env.NODE_ENV === 'production') throw new NotFoundException()
+    return this.funds.devExpire(user.id, id, body?.mode === 'default' ? 'default' : 'overdue')
   }
 
   @Get()
-  @ApiOperation({ summary: 'List Susu funds — mine (default) or all active' })
-  @ApiQuery({ name: 'mine', required: false, example: 'true' })
+  @ApiOperation({ summary: 'List the Susu funds the current user belongs to' })
   @ApiOkResponse({ type: [FundSummaryDto] })
-  list(@CurrentUser() user: AuthUser, @Query('mine') mine?: string) {
-    const scope = mine === 'false' || mine === 'all' ? 'all' : 'mine'
-    return this.funds.list(user.id, scope)
+  list(@CurrentUser() user: AuthUser) {
+    return this.funds.list(user.id, 'mine')
   }
 
   @Get(':id')

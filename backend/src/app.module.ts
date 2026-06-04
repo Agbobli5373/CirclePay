@@ -12,6 +12,7 @@ import { FundsModule } from './funds/funds.module'
 import { ContributionsModule } from './contributions/contributions.module'
 import { PayoutsModule } from './payouts/payouts.module'
 import { ActivityModule } from './activity/activity.module'
+import { TrustModule } from './trust/trust.module'
 import { HealthModule } from './health/health.module'
 
 @Module({
@@ -28,6 +29,7 @@ import { HealthModule } from './health/health.module'
     ContributionsModule,
     PayoutsModule,
     ActivityModule,
+    TrustModule,
     WebhooksModule,
     HealthModule,
   ],

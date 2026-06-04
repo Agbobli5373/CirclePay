@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/app-shell'
-import { ShieldCheck, KeyRound, Fingerprint, Lock, ChevronRight, CheckCircle2, Loader2, Pencil, Check, X } from 'lucide-react'
+import { ShieldCheck, KeyRound, Fingerprint, Lock, ChevronRight, CheckCircle2, Loader2, Pencil, Check, X, AlertCircle } from 'lucide-react'
 import { useMe, useFunds, useLogout, useUpdateProfile } from '@/lib/queries'
 
 const STANDING: Record<string, { label: string; segments: number }> = {
@@ -76,6 +76,18 @@ export default function ProfilePage() {
   return (
     <AppShell currentPage="profile">
       <div className="space-y-6 pb-6 max-w-3xl">
+        {me.trust?.standing === 'locked' && (
+          <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-4 flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <p className="font-semibold text-destructive">Account locked</p>
+              <p className="text-secondary mt-0.5">
+                A missed Susu contribution locked your account across CirclePay. You can&apos;t join or create funds until it&apos;s resolved. Contact support to appeal.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Identity */}
         <div className="cp-card p-6 flex items-center gap-4">
           <div className="h-16 w-16 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xl font-semibold flex-shrink-0">

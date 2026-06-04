@@ -91,6 +91,47 @@ describe('FundsService.createSusu', () => {
     })
     expect(db.$transaction).not.toHaveBeenCalled()
   })
+
+  it('rejects requiresDeposit until deposit collection is built (400)', async () => {
+    const db = {
+      trustScore: { findUnique: jest.fn().mockResolvedValue({ standing: 'good' }) },
+      $transaction: jest.fn(),
+    }
+    await expect(
+      makeSvc(db).createSusu('u1', { requiresDeposit: true, memberCount: 3 } as never),
+    ).rejects.toMatchObject({ response: { code: 'DEPOSIT_NOT_SUPPORTED' } })
+    expect(db.$transaction).not.toHaveBeenCalled()
+  })
+})
+
+describe('FundsService.acceptInvite', () => {
+  const user = { id: 'u2', phone: '+233240000002' }
+  function inviteDb(invite: unknown, existingMember: unknown = null) {
+    return {
+      user: { findUnique: jest.fn().mockResolvedValue(user) },
+      invite: { findUnique: jest.fn().mockResolvedValue(invite) },
+      member: { findUnique: jest.fn().mockResolvedValue(existingMember) },
+    }
+  }
+
+  it('rejects an invalid/expired invite token', async () => {
+    await expect(makeSvc(inviteDb(null)).acceptInvite('u2', 'tok')).rejects.toMatchObject({
+      response: { code: 'INVITE_INVALID' },
+    })
+  })
+
+  it('rejects when the invite was sent to a different number', async () => {
+    const inv = { fundId: 'f1', phone: '+233240000099', status: 'pending' }
+    await expect(makeSvc(inviteDb(inv)).acceptInvite('u2', 'tok')).rejects.toMatchObject({
+      response: { code: 'INVITE_PHONE_MISMATCH' },
+    })
+  })
+
+  it('is idempotent when already a member', async () => {
+    const inv = { fundId: 'f1', phone: '+233240000002', status: 'pending' }
+    const out = await makeSvc(inviteDb(inv, { userId: 'u2' })).acceptInvite('u2', 'tok')
+    expect(out).toEqual({ status: 'active', fundId: 'f1' })
+  })
 })
 
 describe('FundsService.invite', () => {
@@ -172,6 +213,7 @@ describe('FundsService.join', () => {
         count: jest.fn().mockResolvedValue(opts.activeCount ?? 0),
         create: jest.fn().mockResolvedValue({}),
         findMany: jest.fn().mockResolvedValue(txFund.members),
+        updateMany: jest.fn().mockResolvedValue({}),
       },
       invite: { updateMany: jest.fn().mockResolvedValue({}) },
       susuDetail: { update: jest.fn().mockResolvedValue({}) },

@@ -54,9 +54,8 @@ function FundCard({ fund }: { fund: FundSummary }) {
 }
 
 export default function FundsPage() {
-  const [scope, setScope] = useState<'mine' | 'all'>('mine')
   const [search, setSearch] = useState('')
-  const { data: funds, isLoading, isError, refetch } = useFunds(scope)
+  const { data: funds, isLoading, isError, refetch } = useFunds('mine')
 
   const filtered = (funds ?? []).filter((f) => f.name.toLowerCase().includes(search.toLowerCase()))
 
@@ -66,7 +65,7 @@ export default function FundsPage() {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-3xl font-bold text-foreground">Funds</h1>
-            <p className="text-secondary mt-1">Your Susu circles and ones to discover</p>
+            <p className="text-secondary mt-1">Your Susu circles</p>
           </div>
           <Link
             href="/create"
@@ -77,27 +76,14 @@ export default function FundsPage() {
           </Link>
         </div>
 
-        <div className="flex gap-2">
-          {(['mine', 'all'] as const).map((s) => (
-            <button
-              key={s}
-              onClick={() => setScope(s)}
-              className={`px-4 py-2 rounded-full font-medium text-sm transition-colors ${
-                scope === s ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-foreground hover:border-primary'
-              }`}
-            >
-              {s === 'mine' ? 'My funds' : 'Discover'}
-            </button>
-          ))}
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary" />
-            <Input
-              placeholder="Search funds..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 h-10 bg-card border-border"
-            />
-          </div>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary" />
+          <Input
+            placeholder="Search your funds..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10 h-10 bg-card border-border"
+          />
         </div>
 
         {isLoading && (
@@ -124,14 +110,10 @@ export default function FundsPage() {
             </div>
             {filtered.length === 0 && (
               <div className="text-center py-12">
-                <p className="text-secondary">
-                  {scope === 'mine' ? "You haven't joined any Susu yet." : 'No funds found.'}
-                </p>
-                {scope === 'mine' && (
-                  <Link href="/create" className="cp-btn-primary mt-4 inline-flex">
-                    <Plus className="h-4 w-4" /> Create your first Susu
-                  </Link>
-                )}
+                <p className="text-secondary">You haven&apos;t joined any Susu yet.</p>
+                <Link href="/create" className="cp-btn-primary mt-4 inline-flex">
+                  <Plus className="h-4 w-4" /> Create your first Susu
+                </Link>
               </div>
             )}
           </>

@@ -84,10 +84,28 @@ export class ContributionSettlementService implements OnModuleInit {
           where: { externalref },
           data: { status: 'settled', settledAt: new Date(), transactionId: transactionid ?? c.transactionId },
         })
-        await tx.member.updateMany({
-          where: { fundId: c.fundId, userId: c.userId },
-          data: { status: 'paid', paidAt: new Date() },
+        // Mark the member paid (clears any overdue/grace) and update on-time trust scoring.
+        const mem = await tx.member.findUnique({
+          where: { fundId_userId: { fundId: c.fundId, userId: c.userId } },
         })
+        const onTime = !mem?.dueAt || new Date() <= mem.dueAt
+        await tx.member.update({
+          where: { fundId_userId: { fundId: c.fundId, userId: c.userId } },
+          data: { status: 'paid', paidAt: new Date(), fundStatus: 'active' },
+        })
+        const ts = await tx.trustScore.findUnique({ where: { userId: c.userId } })
+        if (ts) {
+          const total = ts.contributionsTotal + 1
+          const onTimeCount = ts.contributionsOnTime + (onTime ? 1 : 0)
+          await tx.trustScore.update({
+            where: { userId: c.userId },
+            data: {
+              contributionsTotal: total,
+              contributionsOnTime: onTimeCount,
+              onTimeRate: Math.round((onTimeCount / total) * 100),
+            },
+          })
+        }
         await tx.activityItem.create({
           data: {
             userId: c.userId,

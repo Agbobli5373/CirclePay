@@ -334,13 +334,15 @@ model Contributor {
 }
 
 model TrustScore {
-  userId         String        @id
-  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  segmentsFilled Int           @default(0)
-  standing       TrustStanding @default(new_)
-  fundsCompleted Int           @default(0)
-  onTimeRate     Int           @default(100) // 0-100
-  activeFunds    Int           @default(0)
+  userId              String        @id
+  user                User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  segmentsFilled      Int           @default(0)
+  standing            TrustStanding @default(new_)
+  fundsCompleted      Int           @default(0)
+  onTimeRate          Int           @default(100) // 0-100, derived from the counters below
+  activeFunds         Int           @default(0)
+  contributionsTotal  Int           @default(0) // settled contributions counted toward on-time rate
+  contributionsOnTime Int           @default(0) // of those, paid on/before the due date
 }
 
 model ActivityItem {

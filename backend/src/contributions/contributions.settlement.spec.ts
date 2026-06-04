@@ -19,7 +19,15 @@ function makeDeps(
   const tx = {
     $queryRaw: jest.fn().mockResolvedValue([]),
     contribution: { findUnique: jest.fn().mockResolvedValue({ ...CONTRIB }), update: jest.fn().mockResolvedValue({}) },
-    member: { updateMany: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(funded.paidCount ?? 1) },
+    member: {
+      findUnique: jest.fn().mockResolvedValue({ dueAt: null }),
+      update: jest.fn().mockResolvedValue({}),
+      count: jest.fn().mockResolvedValue(funded.paidCount ?? 1),
+    },
+    trustScore: {
+      findUnique: jest.fn().mockResolvedValue({ contributionsTotal: 0, contributionsOnTime: 0 }),
+      update: jest.fn().mockResolvedValue({}),
+    },
     activityItem: { create: jest.fn().mockResolvedValue({}) },
     susuDetail: {
       findUnique: jest.fn().mockResolvedValue({
@@ -78,7 +86,7 @@ describe('ContributionSettlementService', () => {
 
     // state + receipt
     expect(tx.contribution.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'settled' }) }))
-    expect(tx.member.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'paid' }) }))
+    expect(tx.member.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'paid' }) }))
     expect(notifications.sendReceipt).toHaveBeenCalledTimes(1)
     expect(db.contribution.update).toHaveBeenCalledWith(expect.objectContaining({ data: { receiptSentAt: expect.any(Date) } }))
   })

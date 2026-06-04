@@ -51,6 +51,18 @@ export default function SusuFundPage() {
   return (
     <AppShell currentPage="funds">
       <div className="max-w-4xl space-y-6">
+        {(myMember?.fundStatus === 'defaulted' || me?.trust?.standing === 'locked') && (
+          <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-4 flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <p className="font-semibold text-destructive">Your account is locked</p>
+              <p className="text-secondary mt-0.5">
+                A missed contribution locked you across all of CirclePay. Pay what you owe or contact support to appeal.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Hero */}
         <div className="cp-card p-6 space-y-6">
           <div>
@@ -150,6 +162,12 @@ export default function SusuFundPage() {
                     <p className="text-sm font-medium text-foreground truncate">
                       {me && m.userId === me.id ? 'You' : m.name || 'Member'}
                       {m.role === 'admin' && <span className="ml-2 cp-pill">Admin</span>}
+                      {m.fundStatus === 'grace' && (
+                        <span className="ml-2 rounded-full bg-yellow-500/15 text-yellow-600 text-xs font-semibold px-2 py-0.5">Grace</span>
+                      )}
+                      {m.fundStatus === 'defaulted' && (
+                        <span className="ml-2 rounded-full bg-destructive/15 text-destructive text-xs font-semibold px-2 py-0.5">Defaulted · locked</span>
+                      )}
                     </p>
                     <p className="text-xs text-secondary capitalize">{m.status}</p>
                   </div>

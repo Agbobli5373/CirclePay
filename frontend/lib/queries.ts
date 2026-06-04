@@ -34,14 +34,11 @@ export function useCreateFund() {
   })
 }
 
-export function useJoinFund(fundId: string) {
+export function useAcceptInvite() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: () => api.funds.join(fundId),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: qk.fund(fundId) })
-      qc.invalidateQueries({ queryKey: ['funds'] })
-    },
+    mutationFn: (token: string) => api.funds.acceptInvite(token),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['funds'] }),
   })
 }
 

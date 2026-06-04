@@ -119,4 +119,7 @@ export class JoinResultDto {
 
   @ApiPropertyOptional({ example: 20000, description: 'Required deposit, pesewas (when pending_deposit).' })
   depositAmount?: number
+
+  @ApiPropertyOptional({ example: 'cmsfundid', description: 'The fund joined (returned by accept-invite).' })
+  fundId?: string
 }
