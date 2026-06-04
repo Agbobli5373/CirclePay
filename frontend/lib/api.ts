@@ -114,6 +114,7 @@ export interface FundDetail extends FundSummary {
   started: boolean
   currentPayeeUserId: string | null
   currentCyclePayoutStatus: string
+  pendingInviteCount: number
 }
 
 export interface ActivityItem {

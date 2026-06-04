@@ -346,6 +346,7 @@ export class FundsService {
     const payout = await this.db.payout.findUnique({
       where: { externalref: `p:${fundId}:${fund.susu.currentCycle}` },
     })
+    const pendingInviteCount = await this.db.invite.count({ where: { fundId, status: 'pending' } })
 
     return {
       ...this.toSummary(fund, userId),
@@ -356,6 +357,7 @@ export class FundsService {
       started: isSusuStarted(fund.susu),
       currentPayeeUserId,
       currentCyclePayoutStatus: payout?.status ?? 'none',
+      pendingInviteCount,
     }
   }
 

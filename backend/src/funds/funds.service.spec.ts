@@ -288,7 +288,7 @@ describe('FundsService.detail', () => {
         { userId: 'b', joinedAtMs: 200 },
       ],
     })
-    const db = { fund: { findUnique: jest.fn().mockResolvedValue(f) }, payout: { findUnique: jest.fn().mockResolvedValue(null) } }
+    const db = { fund: { findUnique: jest.fn().mockResolvedValue(f) }, payout: { findUnique: jest.fn().mockResolvedValue(null) }, invite: { count: jest.fn().mockResolvedValue(0) } }
     const out = await makeSvc(db).detail('a', 'f1')
     expect(out.payoutOrder).toEqual(['a', 'b', 'c'])
     expect(out.members.find((m) => m.userId === 'a')!.payoutPosition).toBe(1)
@@ -303,7 +303,7 @@ describe('FundsService.detail', () => {
         { userId: 'mid', standing: 'good', joinedAtMs: 300 },
       ],
     })
-    const db = { fund: { findUnique: jest.fn().mockResolvedValue(f) }, payout: { findUnique: jest.fn().mockResolvedValue(null) } }
+    const db = { fund: { findUnique: jest.fn().mockResolvedValue(f) }, payout: { findUnique: jest.fn().mockResolvedValue(null) }, invite: { count: jest.fn().mockResolvedValue(0) } }
     const out = await makeSvc(db).detail('safe', 'f1')
     expect(out.payoutOrder).toEqual(['safe', 'mid', 'risky'])
   })

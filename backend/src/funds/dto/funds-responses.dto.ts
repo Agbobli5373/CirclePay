@@ -100,6 +100,9 @@ export class FundDetailDto extends FundSummaryDto {
     description: "Payout status for the current cycle (p:{fundId}:{currentCycle}).",
   })
   currentCyclePayoutStatus!: string
+
+  @ApiProperty({ example: 1, description: 'Pending invites not yet accepted (awaiting members).' })
+  pendingInviteCount!: number
 }
 
 /** Result of inviting members. */
