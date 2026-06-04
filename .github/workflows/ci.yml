@@ -8,6 +8,10 @@ on:
 jobs:
   build-test:
     runs-on: ubuntu-latest
+    # Dummy DATABASE_URL so `prisma validate` can resolve the datasource env.
+    # CI doesn't connect to a DB — tests are hermetic (Prisma is mocked) and builds don't query.
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/circlepay
     steps:
       - uses: actions/checkout@v4
 
