@@ -21,6 +21,8 @@ Matches the PRD onboarding (`frontend/app/onboarding`). Custom, because OTP is d
 | `POST /login` | `{ phone, pin }` | session (consider OTP step-up) |
 | `POST /refresh` | — (refresh cookie) | rotates tokens |
 | `POST /logout` | — | clears cookies |
+| `GET /me` | — (access cookie) | current user + `trust` summary (`standing`, `onTimeRate`, `fundsCompleted`) |
+| `PATCH /me` | `{ name }` | update profile (name); returns the `me` shape |
 
 ## Rules & hardening
 

@@ -14,6 +14,7 @@ Only `NEXT_PUBLIC_*` vars are exposed to the browser. **No secrets here.**
 PORT=4000
 NODE_ENV=development
 CORS_ORIGIN=http://localhost:3000
+APP_BASE_URL=http://localhost:3000   # public app URL used in invite SMS join links
 
 # Database (Neon Postgres)
 DATABASE_URL=postgresql://user:pass@host/db?sslmode=require
@@ -26,6 +27,11 @@ JWT_REFRESH_TTL=30d
 OTP_TTL_SECONDS=300
 OTP_MAX_ATTEMPTS=5
 
+# Susu economics & lifecycle
+PLATFORM_FEE_FLAT=0    # pesewas; fee = FLAT + amount*BPS/10000
+PLATFORM_FEE_BPS=0
+GRACE_HOURS=48         # hours after due date before an overdue member defaults + is locked
+
 # Moolre (see moolre-integration skill)
 MOOLRE_BASE_URL=https://sandbox.moolre.com
 MOOLRE_API_USER=...
@@ -35,9 +41,11 @@ MOOLRE_VASKEY=
 MOOLRE_ACCOUNT_NUMBER=...
 MOOLRE_WEBHOOK_SECRET=...
 MOOLRE_SMS_SENDER_ID=CirclePay   # must be approved at app.moolre.com
+MOOLRE_SUBLIST_ID=               # beneficiary sublist for disbursements/payouts
+MOOLRE_TIMEOUT_MS=15000          # per-request HTTP timeout so a payment call never hangs the worker
 
 # Jobs / locks / queue (concurrency — see operations.md)
-REDIS_URL=                 # optional: distributed locks / BullMQ queue
+REDIS_URL=redis://localhost:6380   # REQUIRED: ephemeral auth state (OTP, lockout, sessions)
 WORKER=false               # set true on the single instance that runs jobs (if not using locks/queue)
 
 # Observability

@@ -41,6 +41,8 @@ async tryWithLock(key: number, fn: () => Promise<void>): Promise<void>
 
 Handlers stay **idempotent** (key on `externalref`/event id), failures increment `attempts` with exponential backoff, rows that exceed max attempts go to `failed` for alerting. See `E2-moolre-ledger.md` (E2-S3) for the full dispatcher spec.
 
+Two scheduled sweeps run today, each `LockService`-guarded: the **outbox dispatcher** (every 5s) and the **trust sweep** (every 30s) which drives `pending → overdue → grace → defaulted` off each member's `dueAt` (grace window `GRACE_HOURS`, default 48h), sends SMS nudges, and on default sets `TrustStanding=locked` platform-wide. See `E6-trust-defaults.md`.
+
 ## Reconciliation jobs
 
 - Compare `moolre_float` ledger balance vs Moolre `/open/account/status` daily → alert on drift.

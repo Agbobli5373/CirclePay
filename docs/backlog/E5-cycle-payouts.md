@@ -6,6 +6,8 @@
 
 > `externalref = p:{fundId}:{cycle}` (UNIQUE → exactly-once payout). Transfer channel: MTN `1`, Telecel `6`, AT `7`, bank `2`. Success `OBGH01`. Settlement truth = webhook/status.
 
+> **As built:** the payout order (incl. the random shuffle) is locked into `SusuDetail.payoutOrder` at **start** (`startedAt`, set when the fund fills) — not at first-fund time. `CycleFunded` → disburse handler (find-or-create unique `Payout`, then transfer). `Payout.settledAt` added; the `PayoutSettled` handler posts the balanced ledger tx, advances the cycle (or completes the fund + bumps each member's `TrustScore`), and SMS-alerts the payee. `moolre_fee` is currently 0 (real fee read deferred to reconciliation).
+
 ---
 
 ### E5-S1 · Detect "cycle funded" & resolve recipient [BE] (M)

@@ -4,15 +4,7 @@ These are **outlined** now and expanded to full stories/specs when their milesto
 
 ---
 
-## E6 · Defaults, Grace & Appeals (+ platform-wide trust lock)
-**Goal:** Enforce the trust moat fairly. **Ref:** `circlepay-domain/references/{risk-and-defaults,roles-and-permissions,compliance}.md`.
-Candidate stories:
-- **E6-S1** Overdue detection: cron flags a member `overdue` when a cycle due date passes; emit `MemberOverdue`; SMS reminder.
-- **E6-S2** Grace window: `overdue → grace` after configurable window with escalating reminders (`MemberInGrace`).
-- **E6-S3** Default + shortfall cover: on grace expiry, `MemberDefaulted`; cover the cycle from deposit → safety pool → guarantor → delay (emit `ShortfallCovered`); set `TrustStanding=locked` platform-wide.
-- **E6-S4** Appeals: member disputes; ops reviews (`/api/ops/appeals/:id`); uphold → unlock/restore, reject → stays locked; full audit log.
-- **E6-S5** Trust scoring recompute: `segmentsFilled/onTimeRate/standing` updates on settle/default/complete; `canJoinFund` enforced everywhere.
-- **E6-S6** Trust-ordered payouts end-to-end + guarantor model + safety-pool surcharge config.
+> **E6 (Defaults, Grace & Trust Lock) is now built** — see `E6-trust-defaults.md`. The **shortfall-coverage** half (deposit/safety-pool/guarantor consumption + `ShortfallCovered`, which needs deposit collection) remains deferred and is listed there.
 
 ## E7/E8 · Full Medical Payouts (escrow + receipt-gated tranches)
 **Goal:** The complete cash-aware model deferred from EM. **Ref:** `circlepay-domain/references/medical-payouts.md`.

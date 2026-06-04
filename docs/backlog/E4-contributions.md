@@ -6,6 +6,8 @@
 
 > `externalref = c:{fundId}:{cycle}:{userId}`. Collection channel: MTN `13`, Telecel `6`, AT `7`. Success `TR099`; OTP needed `TP14`; duplicate ref `TP13`. Settlement truth = webhook `P01` / status `SS01` `txstatus:1`.
 
+> **As built:** `Contribution` gained `settledAt` + `receiptSentAt` (exactly-once SMS receipt). Initiate requires the Susu to have **started** (else `409 FUND_NOT_STARTED`). Settlement is the **`ContributionSettled` outbox handler** (ledger post + member→paid + receipt) — it also updates `TrustScore` on-time counters and, when the cycle is fully funded, emits `CycleFunded`. The Moolre client has a per-request timeout (`MOOLRE_TIMEOUT_MS`).
+
 ---
 
 ### E4-S1 · Initiate a contribution (with OTP) [BE] (L)

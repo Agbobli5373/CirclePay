@@ -65,8 +65,24 @@ Every story follows the same shape:
 
 **Demo target:** E0→E1→E2→E3→E4→E5 gives the Susu hero loop on Moolre **sandbox**; EM adds the medical story for public voting.
 
+| E6 | `E6-trust-defaults.md` | Default lifecycle (overdue→grace→defaulted) + platform-wide trust lock + on-time scoring + appeal — **built** |
+
 **Later (outlined in `BACKLOG-later.md`, detail per-epic when reached):**
-E6 Defaults/grace/appeals & trust lock · E7/E8 full medical payouts (escrow + receipt-gated tranches) · E9 Activity & notifications · E10 USSD flows · E11 AI Advisor seam · E12 Ops console · E13 Hardening & compliance (rate limits, observability, data protection, i18n).
+E7/E8 full medical payouts (escrow + receipt-gated tranches) · E9 Activity & notifications · E10 USSD flows · E11 AI Advisor seam · E12 Ops console · E13 Hardening & compliance (rate limits, observability, data protection, i18n).
+
+## Status (as built — consolidation checkpoint)
+
+- **Done & verified:** E0, E1, E2, E3, E4, E5, **E6** (trust moat), plus the frontend Susu hero-loop wiring (onboarding, funds, create, pay, activity, profile) and name capture. Backend ~115 tests green.
+- **Deferred (the next epics):** shortfall coverage (deposit/safety-pool consumption + `ShortfallCovered`) and **deposit collection** itself (`requiresDeposit` is rejected at create for now); **reconciliation cron** + reading the real `moolre_fee` (E12/E13); **EM** Medical MVP; **E10** USSD; **E11** AI advisor.
+- **Not yet proven:** a real Moolre sandbox collect/transfer (no live creds yet) — the money path is verified via seeded settlement events + unit tests.
+
+## Known frontend placeholders (intentional, tracked)
+
+These ship as mock/stub UI until their epic lands — left as-is deliberately:
+- **Pools** (`/pools`) — mock; no backend concept (overlaps with Funds). Revisit or retire.
+- **AI Advisor** (`/advisor`, linked from Home + Create) — scripted stub → **E11**.
+- **Medical** (`/funds/kofi-mensah`, `/f/kofi-mensah`, the Medical branch of `/create`) — mock/orphaned → **EM** (create currently toasts "coming soon").
+- Dead notification bell; dead `funds.list('all')` branch (list is mine-only) — trivial future tidy.
 
 ## Suggested sequencing & milestones
 

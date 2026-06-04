@@ -6,6 +6,11 @@
 
 > Invariants: `totalCycles === memberCount`; once a Susu **starts**, member list + payout order are **locked**. Money: pesewas.
 
+> **As built (deltas from this spec):**
+> - **Join is invite-only.** There is no open `POST /funds/:id/join`; members accept via `POST /api/funds/join/:token` (the `Invite` model + `InviteStatus` exist; the token must match the caller's MoMo number). The list is **mine-only** (`GET /api/funds`) — no public "all".
+> - **Start = full.** A Susu auto-starts when active members reach `memberCount`: `SusuDetail.startedAt` + `payoutOrder` are locked then, and each member's cycle-1 `dueAt` is set from cadence.
+> - **Deposits deferred.** `requiresDeposit=true` is rejected at create (`DEPOSIT_NOT_SUPPORTED`) until deposit collection + shortfall coverage land (see `E6-trust-defaults.md` / later).
+
 ---
 
 ### E3-S1 · Create a Susu fund [BE] (M)
