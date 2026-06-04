@@ -18,6 +18,8 @@ function fund(opts: {
   currentCycle?: number
   status?: string
   members?: Array<{ userId: string; role?: string; standing?: string; joinedAtMs?: number; status?: string }>
+  startedAt?: Date | null
+  payoutOrder?: string[] | null
 }) {
   const members = (opts.members ?? []).map((m, i) => ({
     userId: m.userId,
@@ -42,6 +44,8 @@ function fund(opts: {
       payoutRule: opts.payoutRule ?? 'rotating',
       requiresDeposit: opts.requiresDeposit ?? false,
       depositAmount: opts.depositAmount ?? 0,
+      startedAt: opts.startedAt ?? null,
+      payoutOrder: opts.payoutOrder ?? null,
     },
     members,
   }
@@ -167,8 +171,10 @@ describe('FundsService.join', () => {
         findUnique: jest.fn().mockResolvedValue(opts.existing ?? null),
         count: jest.fn().mockResolvedValue(opts.activeCount ?? 0),
         create: jest.fn().mockResolvedValue({}),
+        findMany: jest.fn().mockResolvedValue(txFund.members),
       },
       invite: { updateMany: jest.fn().mockResolvedValue({}) },
+      susuDetail: { update: jest.fn().mockResolvedValue({}) },
     }
     const db = {
       user: {
@@ -187,6 +193,24 @@ describe('FundsService.join', () => {
     expect(out).toEqual({ status: 'active' })
     expect(tx.member.create).toHaveBeenCalled()
     expect(tx.$queryRaw).toHaveBeenCalled() // row lock taken
+  })
+
+  it('starts the Susu when the join fills it: locks payoutOrder + startedAt', async () => {
+    const f = fund({
+      memberCount: 2,
+      payoutRule: 'rotating',
+      members: [
+        { userId: 'u1', role: 'admin', joinedAtMs: 100 },
+        { userId: 'u2', joinedAtMs: 200 },
+      ],
+    })
+    const { db, tx } = joinDb(f, { activeCount: 1 }) // this join makes it 2/2
+    const out = await makeSvc(db).join('u2', 'f1')
+    expect(out).toEqual({ status: 'active' })
+    expect(tx.susuDetail.update).toHaveBeenCalledTimes(1)
+    const data = tx.susuDetail.update.mock.calls[0][0].data
+    expect(data.startedAt).toBeInstanceOf(Date)
+    expect(data.payoutOrder).toEqual(['u1', 'u2'])
   })
 
   it('returns pending_deposit when a deposit is required (collection deferred to E4)', async () => {
@@ -222,7 +246,7 @@ describe('FundsService.detail', () => {
         { userId: 'b', joinedAtMs: 200 },
       ],
     })
-    const db = { fund: { findUnique: jest.fn().mockResolvedValue(f) } }
+    const db = { fund: { findUnique: jest.fn().mockResolvedValue(f) }, payout: { findUnique: jest.fn().mockResolvedValue(null) } }
     const out = await makeSvc(db).detail('a', 'f1')
     expect(out.payoutOrder).toEqual(['a', 'b', 'c'])
     expect(out.members.find((m) => m.userId === 'a')!.payoutPosition).toBe(1)
@@ -237,7 +261,7 @@ describe('FundsService.detail', () => {
         { userId: 'mid', standing: 'good', joinedAtMs: 300 },
       ],
     })
-    const db = { fund: { findUnique: jest.fn().mockResolvedValue(f) } }
+    const db = { fund: { findUnique: jest.fn().mockResolvedValue(f) }, payout: { findUnique: jest.fn().mockResolvedValue(null) } }
     const out = await makeSvc(db).detail('safe', 'f1')
     expect(out.payoutOrder).toEqual(['safe', 'mid', 'risky'])
   })

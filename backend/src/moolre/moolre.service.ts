@@ -45,6 +45,7 @@ export class MoolreService implements OnModuleInit {
       accountNumber: accountNumber ?? '',
       apiKey: this.config.get<string>('MOOLRE_API_KEY'),
       vasKey: this.config.get<string>('MOOLRE_VASKEY'),
+      timeoutMs: Number(this.config.get<string>('MOOLRE_TIMEOUT_MS') ?? 15000),
     }
     this.client = new MoolreClient(cfg)
     this.logger.log(`Moolre client ready → ${cfg.baseUrl}`)

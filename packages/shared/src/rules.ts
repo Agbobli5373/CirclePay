@@ -2,7 +2,7 @@
  * Pure CirclePay domain rules. No I/O, no framework imports — safe anywhere.
  * Encodes the rules in ../../references/business-rules.md.
  */
-import type { Pesewas, Posting, PayoutTranche, Receipt, TrustScore, TrustStanding } from './types'
+import type { Pesewas, Posting, PayoutTranche, Receipt, TrustScore, TrustStanding, SusuPayoutRule } from './types'
 
 // ---------- Susu math ----------
 
@@ -86,6 +86,48 @@ export function riskRank(standing: TrustStanding): number {
  */
 export function orderPayoutsByTrust<T extends { standing: TrustStanding }>(members: T[]): T[] {
   return [...members].sort((a, b) => riskRank(b.standing) - riskRank(a.standing))
+}
+
+/** Deterministic PRNG seeded from a string (mulberry32) — reproducible random payout order. */
+function seededShuffle<T>(items: T[], seed: string): T[] {
+  let h = 1779033703 ^ seed.length
+  for (let i = 0; i < seed.length; i++) {
+    h = Math.imul(h ^ seed.charCodeAt(i), 3432918353)
+    h = (h << 13) | (h >>> 19)
+  }
+  let a = h >>> 0
+  const rand = () => {
+    a = (a + 0x6d2b79f5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+  const arr = [...items]
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1))
+    ;[arr[i], arr[j]] = [arr[j], arr[i]]
+  }
+  return arr
+}
+
+/**
+ * Resolve the locked payout order (who is paid in which cycle) for a Susu.
+ * - `rotating`      → join order (by joinedAt)
+ * - `trust_ordered` → safest-first (orderPayoutsByTrust)
+ * - `random`        → deterministic seeded shuffle when `seed` is given (locked in at start);
+ *                     without a seed, falls back to join order (provisional display).
+ */
+export function resolvePayoutOrder(
+  members: { userId: string; standing: TrustStanding; joinedAt: Date | string | number }[],
+  rule: SusuPayoutRule,
+  seed?: string,
+): string[] {
+  const byJoin = [...members].sort(
+    (a, b) => new Date(a.joinedAt).getTime() - new Date(b.joinedAt).getTime(),
+  )
+  if (rule === 'trust_ordered') return orderPayoutsByTrust(byJoin).map((m) => m.userId)
+  if (rule === 'random' && seed) return seededShuffle(byJoin, seed).map((m) => m.userId)
+  return byJoin.map((m) => m.userId)
 }
 
 // ---------- Money formatting ----------

@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service'
 import { LedgerService } from '../ledger/ledger.service'
 import { NotificationsService } from '../notifications/notifications.service'
 import { OutboxDispatcher } from '../outbox/outbox.dispatcher'
+import { OutboxService } from '../outbox/outbox.service'
 
 /**
  * E4-S2/S3 — settle a contribution (idempotent) and send the SMS receipt.
@@ -24,6 +25,7 @@ export class ContributionSettlementService implements OnModuleInit {
     private readonly ledger: LedgerService,
     private readonly notifications: NotificationsService,
     private readonly dispatcher: OutboxDispatcher,
+    private readonly outbox: OutboxService,
   ) {}
 
   onModuleInit(): void {
@@ -69,6 +71,9 @@ export class ContributionSettlementService implements OnModuleInit {
       })
 
       await this.db.$transaction(async (tx) => {
+        // Serialise per-fund so concurrent settlements can't both fire CycleFunded.
+        await tx.$queryRaw`SELECT id FROM "Fund" WHERE id = ${c.fundId} FOR UPDATE`
+
         const fresh = await tx.contribution.findUnique({ where: { externalref } })
         if (!fresh || fresh.status === 'settled') return // lost the race — no double post
         await this.ledger.post(
@@ -94,6 +99,26 @@ export class ContributionSettlementService implements OnModuleInit {
             reference: externalref,
           },
         })
+
+        // E5-S1: when every active member has paid this cycle, emit CycleFunded exactly once.
+        const susu = await tx.susuDetail.findUnique({ where: { fundId: c.fundId } })
+        if (susu) {
+          const paidCount = await tx.member.count({
+            where: { fundId: c.fundId, fundStatus: 'active', status: 'paid' },
+          })
+          if (paidCount >= susu.memberCount) {
+            const cycle = susu.currentCycle
+            const order = Array.isArray(susu.payoutOrder) ? (susu.payoutOrder as string[]) : []
+            const payeeUserId = order[cycle - 1] ?? null
+            const existingPayout = await tx.payout.findUnique({
+              where: { externalref: `p:${c.fundId}:${cycle}` },
+            })
+            if (payeeUserId && !existingPayout) {
+              await this.outbox.emit('CycleFunded', { fundId: c.fundId, cycle, payeeUserId }, tx)
+              this.logger.log(`Cycle funded → CycleFunded ${c.fundId} cycle ${cycle}`)
+            }
+          }
+        }
       })
       this.logger.log(`Settled contribution ${externalref}`)
     }

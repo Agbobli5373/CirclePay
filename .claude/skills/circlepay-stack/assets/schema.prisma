@@ -179,6 +179,8 @@ model SusuDetail {
   depositAmount   Int         @default(0) // pesewas
   currentCycle Int            @default(1)
   totalCycles  Int            // == memberCount
+  startedAt    DateTime?      // set when the fund fills — locks members + payout order (E5)
+  payoutOrder  Json?          // locked userId[] (who is paid in which cycle)
 }
 
 model FundraiserDetail {
@@ -315,6 +317,7 @@ model Payout {
   status        TxStatus @default(initiated)
   transactionId String?
   ts            DateTime @default(now())
+  settledAt     DateTime?
 
   @@index([fundId, status])
 }

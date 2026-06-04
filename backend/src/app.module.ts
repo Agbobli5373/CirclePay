@@ -10,6 +10,7 @@ import { NotificationsModule } from './notifications/notifications.module'
 import { AuthModule } from './auth/auth.module'
 import { FundsModule } from './funds/funds.module'
 import { ContributionsModule } from './contributions/contributions.module'
+import { PayoutsModule } from './payouts/payouts.module'
 import { HealthModule } from './health/health.module'
 
 @Module({
@@ -24,6 +25,7 @@ import { HealthModule } from './health/health.module'
     AuthModule,
     FundsModule,
     ContributionsModule,
+    PayoutsModule,
     WebhooksModule,
     HealthModule,
   ],

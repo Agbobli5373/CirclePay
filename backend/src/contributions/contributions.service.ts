@@ -89,6 +89,9 @@ export class ContributionsService {
     if (fund.status !== 'active') {
       throw new ConflictException({ code: 'FUND_INACTIVE', message: 'This fund is not open' })
     }
+    if (!fund.susu.startedAt) {
+      throw new ConflictException({ code: 'FUND_NOT_STARTED', message: 'This Susu has not started yet (waiting for members)' })
+    }
 
     const cycle = fund.susu.currentCycle
     const externalref = `c:${dto.fundId}:${cycle}:${userId}`

@@ -16,6 +16,7 @@ export interface MoolreConfig {
   apiKey?: string // private key (live); omit in sandbox
   accountNumber: string
   vasKey?: string // X-API-VASKEY — required for SMS/WhatsApp (live)
+  timeoutMs?: number // per-request timeout; a payment call must never hang forever (default 15s)
 }
 
 export function moolreConfigFromEnv(env: NodeJS.ProcessEnv = process.env): MoolreConfig {
@@ -158,6 +159,7 @@ export class MoolreClient {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(this.config.timeoutMs ?? 15_000),
     })
 
     return this.parse<T>(res)
@@ -178,6 +180,7 @@ export class MoolreClient {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-API-VASKEY': this.config.vasKey },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(this.config.timeoutMs ?? 15_000),
     })
     return this.parse<T>(res)
   }

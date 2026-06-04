@@ -9,7 +9,7 @@ function baseDb(over: Record<string, unknown> = {}) {
     idempotencyKey: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
     user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', phone: '+233241234567', network: 'MTN', language: 'en' }) },
     member: { findUnique: jest.fn().mockResolvedValue({ fundStatus: 'active' }) },
-    fund: { findUnique: jest.fn().mockResolvedValue({ status: 'active', susu: { currentCycle: 1, contribution: 50000 } }) },
+    fund: { findUnique: jest.fn().mockResolvedValue({ status: 'active', susu: { currentCycle: 1, contribution: 50000, startedAt: new Date() } }) },
     contribution: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockResolvedValue({}), update: jest.fn().mockResolvedValue({}) },
     ...over,
   }
@@ -77,6 +77,14 @@ describe('ContributionsService.initiate', () => {
     const out = await makeSvc(db, moolre).initiate('u1', { fundId: 'f1' } as never, 'key1')
     expect(out).toMatchObject({ statusCode: 202, body: { state: 'settled' } })
     expect(moolre.isSettled).toHaveBeenCalledWith('c:f1:1:u1')
+  })
+
+  it('rejects contributing to a Susu that has not started yet (409 FUND_NOT_STARTED)', async () => {
+    const db = baseDb()
+    db.fund.findUnique = jest.fn().mockResolvedValue({ status: 'active', susu: { currentCycle: 1, contribution: 50000, startedAt: null } })
+    await expect(makeSvc(db, { collect: jest.fn() }).initiate('u1', { fundId: 'f1' } as never, 'key1')).rejects.toMatchObject({
+      response: { code: 'FUND_NOT_STARTED' },
+    })
   })
 
   it('rejects a non-member with 403 NOT_MEMBER', async () => {

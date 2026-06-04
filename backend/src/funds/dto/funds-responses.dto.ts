@@ -84,6 +84,19 @@ export class FundDetailDto extends FundSummaryDto {
 
   @ApiProperty({ example: 'rotating', enum: ['rotating', 'random', 'trust_ordered'] })
   payoutRule!: string
+
+  @ApiProperty({ example: true, description: 'Whether the Susu has started (filled → order locked).' })
+  started!: boolean
+
+  @ApiPropertyOptional({ example: 'cmsuserA', nullable: true, description: "Recipient of the current cycle's pot." })
+  currentPayeeUserId!: string | null
+
+  @ApiProperty({
+    example: 'none',
+    enum: ['none', 'initiated', 'settled', 'failed'],
+    description: "Payout status for the current cycle (p:{fundId}:{currentCycle}).",
+  })
+  currentCyclePayoutStatus!: string
 }
 
 /** Result of inviting members. */

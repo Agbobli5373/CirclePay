@@ -12,11 +12,23 @@ const CONTRIB = {
   receiptSentAt: null,
 }
 
-function makeDeps(contributionStates: unknown[]) {
+function makeDeps(
+  contributionStates: unknown[],
+  funded: { memberCount?: number; paidCount?: number; payoutOrder?: string[]; existingPayout?: unknown } = {},
+) {
   const tx = {
+    $queryRaw: jest.fn().mockResolvedValue([]),
     contribution: { findUnique: jest.fn().mockResolvedValue({ ...CONTRIB }), update: jest.fn().mockResolvedValue({}) },
-    member: { updateMany: jest.fn().mockResolvedValue({}) },
+    member: { updateMany: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(funded.paidCount ?? 1) },
     activityItem: { create: jest.fn().mockResolvedValue({}) },
+    susuDetail: {
+      findUnique: jest.fn().mockResolvedValue({
+        currentCycle: 1,
+        memberCount: funded.memberCount ?? 2,
+        payoutOrder: funded.payoutOrder ?? ['u1', 'u2'],
+      }),
+    },
+    payout: { findUnique: jest.fn().mockResolvedValue(funded.existingPayout ?? null) },
   }
   const contributionFind = jest.fn()
   contributionStates.forEach((s) => contributionFind.mockResolvedValueOnce(s))
@@ -32,8 +44,15 @@ function makeDeps(contributionStates: unknown[]) {
   }
   const notifications = { sendReceipt: jest.fn().mockResolvedValue(undefined) }
   const dispatcher = { register: jest.fn() }
-  const svc = new ContributionSettlementService(db as never, ledger as never, notifications as never, dispatcher as never)
-  return { svc, db, tx, ledger, notifications, dispatcher }
+  const outbox = { emit: jest.fn().mockResolvedValue(undefined) }
+  const svc = new ContributionSettlementService(
+    db as never,
+    ledger as never,
+    notifications as never,
+    dispatcher as never,
+    outbox as never,
+  )
+  return { svc, db, tx, ledger, notifications, dispatcher, outbox }
 }
 
 beforeEach(() => jest.clearAllMocks())
@@ -62,6 +81,20 @@ describe('ContributionSettlementService', () => {
     expect(tx.member.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'paid' }) }))
     expect(notifications.sendReceipt).toHaveBeenCalledTimes(1)
     expect(db.contribution.update).toHaveBeenCalledWith(expect.objectContaining({ data: { receiptSentAt: expect.any(Date) } }))
+  })
+
+  it('emits CycleFunded once when the last member makes the cycle fully paid', async () => {
+    const settled = { ...CONTRIB, status: 'settled', receiptSentAt: null }
+    const { svc, outbox } = makeDeps([{ ...CONTRIB }, settled], { paidCount: 2, memberCount: 2, payoutOrder: ['u1', 'u2'] })
+    await svc.settle('c:f1:1:u1', 'TX1')
+    expect(outbox.emit).toHaveBeenCalledWith('CycleFunded', { fundId: 'f1', cycle: 1, payeeUserId: 'u1' }, expect.anything())
+  })
+
+  it('does not emit CycleFunded while the cycle is only partially paid', async () => {
+    const settled = { ...CONTRIB, status: 'settled', receiptSentAt: null }
+    const { svc, outbox } = makeDeps([{ ...CONTRIB }, settled], { paidCount: 1, memberCount: 2 })
+    await svc.settle('c:f1:1:u1', 'TX1')
+    expect(outbox.emit).not.toHaveBeenCalled()
   })
 
   it('is idempotent: an already-settled contribution does not post the ledger again', async () => {

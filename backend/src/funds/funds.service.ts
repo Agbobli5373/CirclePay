@@ -12,8 +12,9 @@ import {
   totalCycles,
   cyclePayoutAmount,
   cycleProgressPercent,
-  orderPayoutsByTrust,
+  resolvePayoutOrder,
   type TrustStanding,
+  type SusuPayoutRule,
 } from '@circlepay/shared'
 import { PrismaService } from '../prisma/prisma.service'
 import { NotificationsService } from '../notifications/notifications.service'
@@ -34,6 +35,8 @@ type SusuRow = {
   currentCycle: number
   totalCycles: number
   payoutRule: string
+  startedAt: Date | null
+  payoutOrder: unknown // Json: locked userId[]
 }
 type MemberRow = {
   userId: string
@@ -51,9 +54,9 @@ function toSharedStanding(s: string | null | undefined): TrustStanding {
   return s as TrustStanding
 }
 
-/** A Susu is "started" once the cycle engine (E5) advances past cycle 1. */
-function isSusuStarted(susu: { currentCycle: number }): boolean {
-  return susu.currentCycle > 1
+/** A Susu is "started" once it fills — members + payout order are then locked (E5). */
+function isSusuStarted(susu: { startedAt: Date | null }): boolean {
+  return !!susu.startedAt
 }
 
 @Injectable()
@@ -217,6 +220,27 @@ export class FundsService {
         data: { status: 'accepted' },
       })
 
+      // Fund just filled → start the Susu: lock members + payout order (incl. random shuffle).
+      if (activeCount + 1 >= fund.susu.memberCount) {
+        const members = await tx.member.findMany({
+          where: { fundId, fundStatus: 'active' },
+          include: { user: { include: { trustScore: true } } },
+        })
+        const order = resolvePayoutOrder(
+          members.map((m) => ({
+            userId: m.userId,
+            standing: toSharedStanding(m.user.trustScore?.standing),
+            joinedAt: m.joinedAt,
+          })),
+          fund.susu.payoutRule as SusuPayoutRule,
+          fundId, // seed → deterministic 'random' order
+        )
+        await tx.susuDetail.update({
+          where: { fundId },
+          data: { startedAt: new Date(), payoutOrder: order },
+        })
+      }
+
       if (requiresDeposit) {
         // E4: initiate a Moolre collection (externalref `d:{fundId}:{userId}`); on settlement
         // post the `deposit` ledger leg and set depositPaid=true. Deferred to the Contributions epic.
@@ -261,12 +285,21 @@ export class FundsService {
       payoutPosition: position.get(m.userId) ?? 0,
     }))
 
+    // Current-cycle payout state (for the live UI).
+    const currentPayeeUserId = order[fund.susu.currentCycle - 1] ?? null
+    const payout = await this.db.payout.findUnique({
+      where: { externalref: `p:${fundId}:${fund.susu.currentCycle}` },
+    })
+
     return {
       ...this.toSummary(fund, userId),
       members,
       payoutOrder: order,
       thisCycleFundedCount: fund.members.filter((m) => m.status === 'paid').length,
       payoutRule: fund.susu.payoutRule,
+      started: isSusuStarted(fund.susu),
+      currentPayeeUserId,
+      currentCyclePayoutStatus: payout?.status ?? 'none',
     }
   }
 
@@ -284,16 +317,23 @@ export class FundsService {
     }
   }
 
-  /** Ordered userIds (who is paid in which cycle), per the fund's payout rule. */
+  /**
+   * Ordered userIds (who is paid in which cycle). Once the Susu has started the LOCKED
+   * `payoutOrder` is authoritative; before that it's computed provisionally for display.
+   */
   private computePayoutOrder(susu: SusuRow, members: MemberRow[]): string[] {
-    const byJoin = [...members].sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime())
-    if (susu.payoutRule === 'trust_ordered') {
-      return orderPayoutsByTrust(
-        byJoin.map((m) => ({ userId: m.userId, standing: toSharedStanding(m.user.trustScore?.standing) })),
-      ).map((m) => m.userId)
+    if (Array.isArray(susu.payoutOrder) && susu.payoutOrder.length > 0) {
+      return susu.payoutOrder as string[]
     }
-    // 'rotating' = join order; 'random' = provisional join order until E5 finalises the shuffle at start.
-    return byJoin.map((m) => m.userId)
+    return resolvePayoutOrder(
+      members.map((m) => ({
+        userId: m.userId,
+        standing: toSharedStanding(m.user.trustScore?.standing),
+        joinedAt: m.joinedAt,
+      })),
+      susu.payoutRule as SusuPayoutRule,
+      // no seed → 'random' shows provisional join order until the fund starts
+    )
   }
 
   private toSummary(
