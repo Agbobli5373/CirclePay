@@ -21,6 +21,7 @@ import {
   FundDetailDto,
   InviteResultDto,
   InviteDto,
+  MyInviteDto,
   JoinResultDto,
 } from './dto/funds-responses.dto'
 
@@ -74,6 +75,22 @@ export class FundsController {
   @ApiNotFoundResponse({ description: 'INVITE_NOT_FOUND' })
   revokeInvite(@CurrentUser() user: AuthUser, @Param('id') id: string, @Param('inviteId') inviteId: string) {
     return this.funds.revokeInvite(user.id, id, inviteId)
+  }
+
+  @Get('invites/mine')
+  @ApiOperation({ summary: 'Pending invites addressed to me (in-app invitation inbox)' })
+  @ApiOkResponse({ type: [MyInviteDto] })
+  myInvites(@CurrentUser() user: AuthUser) {
+    return this.funds.myInvites(user.id)
+  }
+
+  @Post('invites/:inviteId/decline')
+  @ApiOperation({ summary: 'Decline an invite addressed to me (frees the seat)' })
+  @ApiOkResponse({ description: '{ ok: true }' })
+  @ApiForbiddenResponse({ description: 'INVITE_PHONE_MISMATCH — invite was sent to a different number' })
+  @ApiNotFoundResponse({ description: 'INVITE_NOT_FOUND' })
+  declineInvite(@CurrentUser() user: AuthUser, @Param('inviteId') inviteId: string) {
+    return this.funds.declineInvite(user.id, inviteId)
   }
 
   @Post('join/:token')

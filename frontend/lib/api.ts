@@ -120,8 +120,23 @@ export interface FundDetail extends FundSummary {
 export interface Invite {
   id: string
   phone: string
-  status: 'pending' | 'accepted' | 'expired'
+  status: 'pending' | 'accepted' | 'expired' | 'declined'
   joinUrl: string
+  createdAt: string
+}
+
+/** A pending invite addressed to the current user (in-app "Invitations" inbox). */
+export interface MyInvite {
+  id: string
+  token: string
+  fundId: string
+  fundName: string
+  contribution: number
+  frequency: string
+  memberCount: number
+  seatsLeft: number
+  payoutRule: string
+  inviterName: string
   createdAt: string
 }
 
@@ -200,6 +215,9 @@ export const api = {
       request<{ ok: true }>(`/funds/${id}/invites/${inviteId}/resend`, { method: 'POST' }),
     revokeInvite: (id: string, inviteId: string) =>
       request<{ ok: true }>(`/funds/${id}/invites/${inviteId}`, { method: 'DELETE' }),
+    myInvites: () => request<MyInvite[]>('/funds/invites/mine'),
+    declineInvite: (inviteId: string) =>
+      request<{ ok: true }>(`/funds/invites/${inviteId}/decline`, { method: 'POST' }),
     acceptInvite: (token: string) =>
       request<{ status: string; fundId?: string; depositAmount?: number }>(
         `/funds/join/${encodeURIComponent(token)}`,

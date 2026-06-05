@@ -38,7 +38,23 @@ export function useAcceptInvite() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (token: string) => api.funds.acceptInvite(token),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['funds'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['funds'] })
+      qc.invalidateQueries({ queryKey: ['my-invites'] })
+    },
+  })
+}
+
+/** Pending invites addressed to me (dashboard + funds "Invitations" inbox). */
+export function useMyInvites() {
+  return useQuery({ queryKey: ['my-invites'], queryFn: api.funds.myInvites })
+}
+
+export function useDeclineInvite() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (inviteId: string) => api.funds.declineInvite(inviteId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['my-invites'] }),
   })
 }
 

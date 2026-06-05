@@ -24,6 +24,7 @@ import type {
   FundDetailDto,
   MemberDto,
   InviteResultDto,
+  MyInviteDto,
   JoinResultDto,
 } from './dto/funds-responses.dto'
 
@@ -233,6 +234,65 @@ export class FundsService {
     return { ok: true }
   }
 
+  // ---------- incoming invites (invitee side) ----------
+
+  /** Invitee inbox: pending invites addressed to the current user's MoMo number. */
+  async myInvites(userId: string): Promise<MyInviteDto[]> {
+    const user = await this.db.user.findUnique({ where: { id: userId } })
+    if (!user) throw new NotFoundException({ code: 'NOT_FOUND', message: 'User not found' })
+
+    const invites = await this.db.invite.findMany({
+      where: { phone: user.phone, status: 'pending' },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        fund: {
+          include: {
+            susu: true,
+            createdBy: { select: { name: true } },
+            members: { where: { fundStatus: 'active' }, select: { userId: true } },
+          },
+        },
+      },
+    })
+
+    const rows: MyInviteDto[] = []
+    for (const inv of invites) {
+      const fund = inv.fund
+      // Skip invites that can no longer be accepted, or that I've already joined.
+      if (!fund.susu || fund.status !== 'active' || isSusuStarted(fund.susu)) continue
+      if (fund.members.some((m) => m.userId === userId)) continue
+      rows.push({
+        id: inv.id,
+        token: inv.token,
+        fundId: fund.id,
+        fundName: fund.name,
+        contribution: fund.susu.contribution,
+        frequency: fund.susu.frequency,
+        memberCount: fund.susu.memberCount,
+        seatsLeft: Math.max(0, fund.susu.memberCount - fund.members.length),
+        payoutRule: fund.susu.payoutRule,
+        inviterName: fund.createdBy?.name ?? 'A friend',
+        createdAt: inv.createdAt,
+      })
+    }
+    return rows
+  }
+
+  /** Invitee: decline an invite addressed to me. Frees the seat; the admin sees it as 'declined'. */
+  async declineInvite(userId: string, inviteId: string): Promise<{ ok: true }> {
+    const user = await this.db.user.findUnique({ where: { id: userId } })
+    if (!user) throw new NotFoundException({ code: 'NOT_FOUND', message: 'User not found' })
+    const invite = await this.db.invite.findUnique({ where: { id: inviteId } })
+    if (!invite) throw new NotFoundException({ code: 'INVITE_NOT_FOUND', message: 'Invite not found' })
+    if (invite.phone !== user.phone) {
+      throw new ForbiddenException({ code: 'INVITE_PHONE_MISMATCH', message: 'This invite was sent to a different MoMo number' })
+    }
+    if (invite.status === 'pending') {
+      await this.db.invite.update({ where: { id: inviteId }, data: { status: 'declined' } })
+    }
+    return { ok: true } // idempotent for already-resolved invites
+  }
+
   // ---------- join ----------
 
   async join(userId: string, fundId: string): Promise<JoinResultDto> {
@@ -336,9 +396,15 @@ export class FundsService {
     const existing = await this.db.member.findUnique({
       where: { fundId_userId: { fundId: invite.fundId, userId } },
     })
-    if (existing) return { status: 'active', fundId: invite.fundId } // idempotent
+    if (existing) {
+      if (invite.status !== 'accepted') {
+        await this.db.invite.update({ where: { id: invite.id }, data: { status: 'accepted' } })
+      }
+      return { status: 'active', fundId: invite.fundId } // idempotent
+    }
 
     const result = await this.join(userId, invite.fundId)
+    await this.db.invite.update({ where: { id: invite.id }, data: { status: 'accepted' } })
     return { ...result, fundId: invite.fundId }
   }
 

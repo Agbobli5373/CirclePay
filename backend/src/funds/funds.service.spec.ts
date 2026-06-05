@@ -109,7 +109,7 @@ describe('FundsService.acceptInvite', () => {
   function inviteDb(invite: unknown, existingMember: unknown = null) {
     return {
       user: { findUnique: jest.fn().mockResolvedValue(user) },
-      invite: { findUnique: jest.fn().mockResolvedValue(invite) },
+      invite: { findUnique: jest.fn().mockResolvedValue(invite), update: jest.fn().mockResolvedValue({}) },
       member: { findUnique: jest.fn().mockResolvedValue(existingMember) },
     }
   }
@@ -127,10 +127,12 @@ describe('FundsService.acceptInvite', () => {
     })
   })
 
-  it('is idempotent when already a member', async () => {
-    const inv = { fundId: 'f1', phone: '+233240000002', status: 'pending' }
-    const out = await makeSvc(inviteDb(inv, { userId: 'u2' })).acceptInvite('u2', 'tok')
+  it('is idempotent when already a member, and marks the invite accepted', async () => {
+    const inv = { id: 'i1', fundId: 'f1', phone: '+233240000002', status: 'pending' }
+    const db = inviteDb(inv, { userId: 'u2' })
+    const out = await makeSvc(db).acceptInvite('u2', 'tok')
     expect(out).toEqual({ status: 'active', fundId: 'f1' })
+    expect(db.invite.update).toHaveBeenCalledWith({ where: { id: 'i1' }, data: { status: 'accepted' } })
   })
 })
 
@@ -365,5 +367,76 @@ describe('FundsService invite management', () => {
     const out = await makeSvc(d).revokeInvite('admin', 'f1', 'i1')
     expect(out).toEqual({ ok: true })
     expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: { status: 'expired' } }))
+  })
+})
+
+describe('FundsService incoming invites (invitee side)', () => {
+  const user = { id: 'u2', phone: '+233240000002' }
+
+  function inviteFund(over: Partial<{ status: string; startedAt: Date | null; members: { userId: string }[] }> = {}) {
+    return {
+      id: 'f1',
+      name: 'Kumasi Traders',
+      status: over.status ?? 'active',
+      susu: {
+        contribution: 50000,
+        frequency: 'monthly',
+        memberCount: 6,
+        payoutRule: 'rotating',
+        startedAt: over.startedAt ?? null,
+      },
+      createdBy: { name: 'Ama' },
+      members: over.members ?? [{ userId: 'admin' }],
+    }
+  }
+
+  it('returns pending invites addressed to my phone with fund + seat info', async () => {
+    const d = {
+      user: { findUnique: jest.fn().mockResolvedValue(user) },
+      invite: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'i1', token: 'tok1', createdAt: new Date(), fund: inviteFund() },
+        ]),
+      },
+    }
+    const out = await makeSvc(d).myInvites('u2')
+    expect(out).toHaveLength(1)
+    expect(out[0]).toMatchObject({
+      id: 'i1', token: 'tok1', fundId: 'f1', fundName: 'Kumasi Traders',
+      contribution: 50000, memberCount: 6, seatsLeft: 5, inviterName: 'Ama',
+    })
+  })
+
+  it('hides invites for started funds and ones I already joined', async () => {
+    const d = {
+      user: { findUnique: jest.fn().mockResolvedValue(user) },
+      invite: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'i1', token: 't1', createdAt: new Date(), fund: inviteFund({ startedAt: new Date() }) },
+          { id: 'i2', token: 't2', createdAt: new Date(), fund: inviteFund({ members: [{ userId: 'u2' }] }) },
+        ]),
+      },
+    }
+    const out = await makeSvc(d).myInvites('u2')
+    expect(out).toHaveLength(0)
+  })
+
+  it('declines an invite addressed to me (status → declined)', async () => {
+    const update = jest.fn().mockResolvedValue({})
+    const d = {
+      user: { findUnique: jest.fn().mockResolvedValue(user) },
+      invite: { findUnique: jest.fn().mockResolvedValue({ id: 'i1', phone: '+233240000002', status: 'pending' }), update },
+    }
+    const out = await makeSvc(d).declineInvite('u2', 'i1')
+    expect(out).toEqual({ ok: true })
+    expect(update).toHaveBeenCalledWith({ where: { id: 'i1' }, data: { status: 'declined' } })
+  })
+
+  it('rejects declining an invite sent to a different number (403)', async () => {
+    const d = {
+      user: { findUnique: jest.fn().mockResolvedValue(user) },
+      invite: { findUnique: jest.fn().mockResolvedValue({ id: 'i1', phone: '+233240000099', status: 'pending' }), update: jest.fn() },
+    }
+    await expect(makeSvc(d).declineInvite('u2', 'i1')).rejects.toMatchObject({ response: { code: 'INVITE_PHONE_MISMATCH' } })
   })
 })

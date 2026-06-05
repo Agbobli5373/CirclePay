@@ -87,6 +87,7 @@ enum InviteStatus {
   pending
   accepted
   expired
+  declined
 }
 
 enum MedicalPayoutRoute {

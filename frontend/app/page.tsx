@@ -5,6 +5,7 @@ import { AppShell } from '@/components/app-shell'
 import { Plus, Sparkles, ArrowUpRight, ArrowDownLeft, Loader2 } from 'lucide-react'
 import { formatGhs } from '@circlepay/shared'
 import { useMe, useFunds, useActivity } from '@/lib/queries'
+import { InvitationInbox } from '@/components/invitation-inbox'
 
 function formatWhen(iso: string): string {
   const d = new Date(iso)
@@ -38,6 +39,9 @@ export default function Home() {
           <h2 className="text-2xl lg:text-3xl font-bold text-foreground tracking-tight">Akwaaba, {firstName}</h2>
           <p className="text-sm text-secondary mt-1.5">Here&apos;s how your funds are doing</p>
         </div>
+
+        {/* Pending invitations addressed to you */}
+        <InvitationInbox />
 
         {/* Row 1: Per-cycle commitment + next payout */}
         <div className="grid gap-5 lg:grid-cols-3">

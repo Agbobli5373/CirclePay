@@ -16,6 +16,7 @@ const STATUS: Record<Invite['status'], { label: string; cls: string }> = {
   pending: { label: 'Pending', cls: 'bg-yellow-500/15 text-yellow-600' },
   accepted: { label: 'Joined', cls: 'bg-primary/15 text-primary' },
   expired: { label: 'Revoked', cls: 'bg-muted text-secondary' },
+  declined: { label: 'Declined', cls: 'bg-destructive/10 text-destructive' },
 }
 
 /** Admin invite manager: add by number, then see/share/resend/revoke each invite. */
