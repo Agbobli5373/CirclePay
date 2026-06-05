@@ -152,7 +152,7 @@ describe('FundsService.invite', () => {
         count: jest.fn().mockResolvedValue(1),
       },
       user: { findMany: jest.fn().mockResolvedValue([]) },
-      invite: { upsert: jest.fn().mockResolvedValue({ token: 'tok' }) },
+      invite: { findMany: jest.fn().mockResolvedValue([]), upsert: jest.fn().mockResolvedValue({ token: 'tok' }) },
     }
     const out = await makeSvc(db).invite('admin', 'f1', {
       phones: ['+233240000001', '+233240000002'],
@@ -170,7 +170,7 @@ describe('FundsService.invite', () => {
         count: jest.fn().mockResolvedValue(1),
       },
       user: { findMany: jest.fn().mockResolvedValue([{ phone: '+233240000002' }]) },
-      invite: { upsert: jest.fn().mockResolvedValue({ token: 'tok' }) },
+      invite: { findMany: jest.fn().mockResolvedValue([]), upsert: jest.fn().mockResolvedValue({ token: 'tok' }) },
     }
     const out = await makeSvc(db).invite('admin', 'f1', {
       phones: ['+233240000001', '+233240000001', '+233240000002'],
@@ -197,11 +197,59 @@ describe('FundsService.invite', () => {
         count: jest.fn().mockResolvedValue(1), // 1 seat left
       },
       user: { findMany: jest.fn().mockResolvedValue([]) },
-      invite: { upsert: jest.fn() },
+      invite: { findMany: jest.fn().mockResolvedValue([]), upsert: jest.fn() },
     }
     await expect(
       makeSvc(db).invite('admin', 'f1', { phones: ['+233240000001', '+233240000002'] } as never),
     ).rejects.toMatchObject({ response: { code: 'SEATS_EXCEEDED' } })
+  })
+
+  it('counts pending invites against capacity (one invite per seat)', async () => {
+    // memberCount 3, 1 active member, 2 pending → 0 open seats; a 3rd new phone is rejected.
+    const db = {
+      fund: { findUnique: jest.fn().mockResolvedValue({ ...adminFund(), susu: { memberCount: 3, currentCycle: 1 } }) },
+      member: { findUnique: jest.fn().mockResolvedValue({ role: 'admin' }), count: jest.fn().mockResolvedValue(1) },
+      user: { findMany: jest.fn().mockResolvedValue([]) },
+      invite: {
+        findMany: jest.fn().mockResolvedValue([{ phone: '+233240000001' }, { phone: '+233240000002' }]),
+        upsert: jest.fn(),
+      },
+    }
+    await expect(
+      makeSvc(db).invite('admin', 'f1', { phones: ['+233240000003'] } as never),
+    ).rejects.toMatchObject({ response: { code: 'SEATS_EXCEEDED' } })
+  })
+
+  it('lets the admin re-invite an already-pending number without consuming a seat', async () => {
+    // memberCount 3, 1 active, 2 pending (full). Re-sending to a pending number is allowed.
+    const db = {
+      fund: { findUnique: jest.fn().mockResolvedValue({ ...adminFund(), susu: { memberCount: 3, currentCycle: 1 } }) },
+      member: { findUnique: jest.fn().mockResolvedValue({ role: 'admin' }), count: jest.fn().mockResolvedValue(1) },
+      user: { findMany: jest.fn().mockResolvedValue([]) },
+      invite: {
+        findMany: jest.fn().mockResolvedValue([{ phone: '+233240000001' }, { phone: '+233240000002' }]),
+        upsert: jest.fn().mockResolvedValue({ token: 'tok' }),
+      },
+    }
+    const out = await makeSvc(db).invite('admin', 'f1', { phones: ['+233240000001'] } as never)
+    expect(out).toEqual({ invited: 1 })
+    expect(db.invite.upsert).toHaveBeenCalledTimes(1)
+  })
+
+  it('frees a seat once a pending invite is gone (decline/revoke) so a replacement can be invited', async () => {
+    // memberCount 3, 1 active, only 1 pending now (the other declined) → 1 open seat.
+    const db = {
+      fund: { findUnique: jest.fn().mockResolvedValue({ ...adminFund(), susu: { memberCount: 3, currentCycle: 1 } }) },
+      member: { findUnique: jest.fn().mockResolvedValue({ role: 'admin' }), count: jest.fn().mockResolvedValue(1) },
+      user: { findMany: jest.fn().mockResolvedValue([]) },
+      invite: {
+        findMany: jest.fn().mockResolvedValue([{ phone: '+233240000001' }]),
+        upsert: jest.fn().mockResolvedValue({ token: 'tok' }),
+      },
+    }
+    const out = await makeSvc(db).invite('admin', 'f1', { phones: ['+233240000009'] } as never)
+    expect(out).toEqual({ invited: 1 })
+    expect(db.invite.upsert).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -294,6 +342,7 @@ describe('FundsService.detail', () => {
     const out = await makeSvc(db).detail('a', 'f1')
     expect(out.payoutOrder).toEqual(['a', 'b', 'c'])
     expect(out.members.find((m) => m.userId === 'a')!.payoutPosition).toBe(1)
+    expect(out.openSeats).toBe(3) // memberCount 6 − 3 members − 0 pending
   })
 
   it('orders payout safest-first for trust_ordered', async () => {

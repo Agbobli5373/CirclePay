@@ -103,6 +103,9 @@ export class FundDetailDto extends FundSummaryDto {
 
   @ApiProperty({ example: 1, description: 'Pending invites not yet accepted (awaiting members).' })
   pendingInviteCount!: number
+
+  @ApiProperty({ example: 1, description: 'Seats free to invite into = memberCount − members − pendingInvites.' })
+  openSeats!: number
 }
 
 /** Result of inviting members. */

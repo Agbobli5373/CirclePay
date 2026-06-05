@@ -45,7 +45,8 @@ export default function SusuFundPage() {
   const myMember = me ? fund.members.find((m) => m.userId === me.id) : undefined
   const isAdmin = myMember?.role === 'admin'
   const joined = fund.members.length
-  const seatsLeft = Math.max(0, fund.memberCount - joined)
+  const pendingInvites = fund.pendingInviteCount
+  const openSeats = fund.openSeats // memberCount − members − pendingInvites (free to invite into)
   const seatsPct = fund.memberCount > 0 ? Math.round((joined / fund.memberCount) * 100) : 0
 
   const iPaid = myMember?.status === 'paid'
@@ -86,7 +87,7 @@ export default function SusuFundPage() {
                   <p className="text-2xl font-bold text-foreground">
                     {joined} <span className="text-secondary font-medium text-lg">of {fund.memberCount} joined</span>
                   </p>
-                  <p className="text-sm font-semibold text-primary">{seatsLeft} seat{seatsLeft === 1 ? '' : 's'} left</p>
+                  <p className="text-sm font-semibold text-primary">{openSeats} seat{openSeats === 1 ? '' : 's'} left</p>
                 </div>
                 <div className="w-full bg-muted rounded-full h-2.5">
                   <div className="bg-primary h-2.5 rounded-full transition-all" style={{ width: `${seatsPct}%` }} />
@@ -119,7 +120,7 @@ export default function SusuFundPage() {
                   <UserPlus className="h-5 w-5 text-primary" />
                   <h2 className="text-lg font-semibold text-foreground">Invite & manage</h2>
                 </div>
-                <InviteMembers fundId={fund.id} fundName={fund.name} remaining={seatsLeft} />
+                <InviteMembers fundId={fund.id} fundName={fund.name} remaining={openSeats} />
               </div>
             )}
 
@@ -136,16 +137,19 @@ export default function SusuFundPage() {
                     </p>
                   </div>
                 ))}
-                {Array.from({ length: seatsLeft }).map((_, i) => (
+                {Array.from({ length: pendingInvites }).map((_, i) => (
+                  <div key={`pending-${i}`} className="flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+                    <Clock className="h-5 w-5 text-amber-600 flex-shrink-0" />
+                    <p className="text-sm text-foreground">Invited · awaiting response</p>
+                  </div>
+                ))}
+                {Array.from({ length: openSeats }).map((_, i) => (
                   <div key={`seat-${i}`} className="flex items-center gap-3 rounded-lg border border-dashed border-border p-3">
                     <UserCircle2 className="h-5 w-5 text-secondary flex-shrink-0" />
                     <p className="text-sm text-secondary">Open seat</p>
                   </div>
                 ))}
               </div>
-              {fund.pendingInviteCount > 0 && (
-                <p className="text-xs text-secondary">{fund.pendingInviteCount} invited · awaiting</p>
-              )}
               <p className="text-xs text-secondary border-t border-border/50 pt-3">Payout order is set when the circle fills.</p>
             </div>
           </>

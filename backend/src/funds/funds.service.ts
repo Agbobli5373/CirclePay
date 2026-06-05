@@ -152,8 +152,13 @@ export class FundsService {
       throw new ForbiddenException({ code: 'FORBIDDEN', message: 'The Susu has already started' })
     }
 
+    // A seat is occupied by an active member OR a pending invite (one invite per seat).
     const activeCount = await this.db.member.count({ where: { fundId, fundStatus: 'active' } })
-    const remaining = fund.susu!.memberCount - activeCount
+    const pending = await this.db.invite.findMany({
+      where: { fundId, status: 'pending' },
+      select: { phone: true },
+    })
+    const remaining = fund.susu!.memberCount - activeCount - pending.length
 
     const unique = [...new Set(dto.phones)]
     const alreadyMembers = await this.db.user.findMany({
@@ -163,7 +168,10 @@ export class FundsService {
     const memberPhones = new Set(alreadyMembers.map((u) => u.phone))
     const candidates = unique.filter((p) => !memberPhones.has(p))
 
-    if (candidates.length > remaining) {
+    // Re-inviting an already-pending number is a reminder (handled via resend), not a new seat.
+    const pendingPhones = new Set(pending.map((i) => i.phone))
+    const newSeats = candidates.filter((p) => !pendingPhones.has(p))
+    if (newSeats.length > remaining) {
       throw new BadRequestException({
         code: 'SEATS_EXCEEDED',
         message: `Only ${Math.max(0, remaining)} seat(s) remaining`,
@@ -477,6 +485,7 @@ export class FundsService {
       currentPayeeUserId,
       currentCyclePayoutStatus: payout?.status ?? 'none',
       pendingInviteCount,
+      openSeats: Math.max(0, fund.susu.memberCount - fund.members.length - pendingInviteCount),
     }
   }
 

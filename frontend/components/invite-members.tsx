@@ -25,6 +25,7 @@ export function InviteMembers({ fundId, fundName, remaining }: { fundId: string;
   const resend = useResendInvite(fundId)
   const revoke = useRevokeInvite(fundId)
   const { data: invites, isLoading } = useFundInvites(fundId)
+  const pendingCount = (invites ?? []).filter((i) => i.status === 'pending').length
 
   const [phone, setPhone] = useState('')
   const [list, setList] = useState<string[]>([])
@@ -117,7 +118,13 @@ export function InviteMembers({ fundId, fundName, remaining }: { fundId: string;
             </button>
           </div>
         )}
-        <p className="text-xs text-secondary">{remaining} seat{remaining === 1 ? '' : 's'} left — invitees get an SMS with a join link.</p>
+        {remaining === 0 && pendingCount > 0 ? (
+          <p className="text-xs text-secondary">
+            All seats are reserved. Revoke a pending invite below, or wait for a response, to invite someone else.
+          </p>
+        ) : (
+          <p className="text-xs text-secondary">{remaining} seat{remaining === 1 ? '' : 's'} left — invitees get an SMS with a join link.</p>
+        )}
       </div>
 
       {/* Sent invites */}
