@@ -1,7 +1,8 @@
 'use client'
 
-import { Home, Wallet, Users, ActivitySquare, User, Bell, ChevronLeft, ChevronRight, LogOut, Loader2 } from 'lucide-react'
+import { Home, Wallet, Users, ActivitySquare, User, ChevronLeft, ChevronRight, LogOut, Loader2 } from 'lucide-react'
 import { Logo, LogoMark } from './logo'
+import { NotificationsBell } from './notifications-bell'
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -155,10 +156,7 @@ export function AppShell({ children, currentPage = 'home' }: AppShellProps) {
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Desktop top bar */}
         <header className="sticky top-0 z-40 hidden lg:flex items-center justify-end gap-1 h-16 px-6 border-b border-border bg-background">
-          <button className="relative p-2 text-secondary hover:text-foreground hover:bg-muted rounded-full transition-colors">
-            <Bell className="h-5 w-5" />
-            <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive" />
-          </button>
+          <NotificationsBell />
           <button
             onClick={handleLogout}
             title="Log out"
@@ -171,10 +169,7 @@ export function AppShell({ children, currentPage = 'home' }: AppShellProps) {
         {/* Mobile top bar */}
         <header className="sticky top-0 z-40 flex items-center justify-between h-14 px-4 border-b border-border bg-background/90 backdrop-blur-sm lg:hidden">
           <Logo />
-          <button className="relative p-2 text-secondary">
-            <Bell className="h-5 w-5" />
-            <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-destructive" />
-          </button>
+          <NotificationsBell />
         </header>
 
         {/* Page content */}
