@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/app-shell'
-import { BadgeCheck, ShieldCheck, Copy, Loader2, AlertCircle, CheckCircle2, Banknote, Clock } from 'lucide-react'
+import { BadgeCheck, ShieldCheck, Copy, Loader2, AlertCircle, CheckCircle2, Banknote, Clock, ChevronLeft } from 'lucide-react'
 import { formatGhs } from '@circlepay/shared'
 import { useFundraiser, useMe, useVerifyPayee, useReleasePayout } from '@/lib/queries'
 import { ApiError } from '@/lib/api'
@@ -76,6 +76,15 @@ export default function FundraiserDetailPage() {
   return (
     <AppShell currentPage="funds">
       <div className="max-w-3xl space-y-6">
+        {/* Back nav */}
+        <Link
+          href="/funds"
+          className="inline-flex items-center gap-1 text-sm text-secondary hover:text-foreground transition-colors -ml-0.5"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Funds
+        </Link>
+
         <div className="cp-card p-6 space-y-5">
           <div>
             <div className="flex flex-wrap items-center gap-2 mb-2">

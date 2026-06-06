@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { AppShell } from '@/components/app-shell'
-import { CheckCircle2, AlertCircle, Clock, Loader2, UserPlus, UserCircle2 } from 'lucide-react'
+import { CheckCircle2, AlertCircle, Clock, Loader2, UserPlus, UserCircle2, ChevronLeft } from 'lucide-react'
 import { formatGhs } from '@circlepay/shared'
 import { useFund, useMe } from '@/lib/queries'
 import { InviteMembers } from '@/components/invite-members'
@@ -57,6 +57,15 @@ export default function SusuFundPage() {
   return (
     <AppShell currentPage="funds">
       <div className="max-w-4xl space-y-6">
+        {/* Back nav */}
+        <Link
+          href="/funds"
+          className="inline-flex items-center gap-1 text-sm text-secondary hover:text-foreground transition-colors -ml-0.5"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Funds
+        </Link>
+
         {(myMember?.fundStatus === 'defaulted' || me?.trust?.standing === 'locked') && (
           <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-4 flex items-start gap-3">
             <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
