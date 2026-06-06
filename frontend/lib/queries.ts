@@ -94,12 +94,16 @@ export function useCreateMedical() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (body: CreateMedicalPayload) => api.fundraisers.create(body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['funds'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['my-fundraisers'] }),
   })
 }
 
 export function useFundraiser(id: string) {
   return useQuery({ queryKey: ['fundraiser', id], queryFn: () => api.fundraisers.detail(id), enabled: !!id })
+}
+
+export function useMyFundraisers() {
+  return useQuery({ queryKey: ['my-fundraisers'], queryFn: api.fundraisers.mine })
 }
 
 export function usePublicFundraiser(slug: string) {

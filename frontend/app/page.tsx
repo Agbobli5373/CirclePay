@@ -4,7 +4,8 @@ import Link from 'next/link'
 import { AppShell } from '@/components/app-shell'
 import { Plus, Sparkles, ArrowUpRight, ArrowDownLeft, Loader2 } from 'lucide-react'
 import { formatGhs } from '@circlepay/shared'
-import { useMe, useFunds, useActivity } from '@/lib/queries'
+import { useMe, useFunds, useActivity, useMyFundraisers } from '@/lib/queries'
+import { MedicalFundCard } from '@/components/medical-fund-card'
 
 function formatWhen(iso: string): string {
   const d = new Date(iso)
@@ -18,6 +19,7 @@ function formatWhen(iso: string): string {
 export default function Home() {
   const { data: me } = useMe()
   const { data: funds, isLoading: fundsLoading } = useFunds('mine')
+  const { data: medical } = useMyFundraisers()
   const { data: activity } = useActivity()
   const firstName = me?.name?.trim()?.split(/\s+/)[0] || me?.phone || 'there'
   const list = funds ?? []
@@ -176,6 +178,21 @@ export default function Home() {
             </div>
           </div>
         </div>
+
+        {/* Medical fundraisers you organize */}
+        {(medical?.length ?? 0) > 0 && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-semibold text-foreground">Medical fundraisers</h3>
+              <Link href="/funds" className="text-xs text-primary font-medium hover:underline">View all</Link>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
+              {medical!.slice(0, 3).map((m) => (
+                <MedicalFundCard key={m.id} f={m} />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </AppShell>
   )

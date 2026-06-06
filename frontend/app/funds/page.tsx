@@ -5,9 +5,10 @@ import { AppShell } from '@/components/app-shell'
 import { Search, Plus, Users, RefreshCcw, Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { useState } from 'react'
-import { useFunds } from '@/lib/queries'
+import { useFunds, useMyFundraisers } from '@/lib/queries'
 import { formatGhs } from '@circlepay/shared'
 import type { FundSummary } from '@/lib/api'
+import { MedicalFundCard } from '@/components/medical-fund-card'
 
 function FundCard({ fund }: { fund: FundSummary }) {
   return (
@@ -56,8 +57,11 @@ function FundCard({ fund }: { fund: FundSummary }) {
 export default function FundsPage() {
   const [search, setSearch] = useState('')
   const { data: funds, isLoading, isError, refetch } = useFunds('mine')
+  const { data: medical } = useMyFundraisers()
 
-  const filtered = (funds ?? []).filter((f) => f.name.toLowerCase().includes(search.toLowerCase()))
+  const q = search.toLowerCase()
+  const filtered = (funds ?? []).filter((f) => f.name.toLowerCase().includes(q))
+  const filteredMedical = (medical ?? []).filter((m) => m.name.toLowerCase().includes(q) || m.beneficiary.toLowerCase().includes(q))
 
   return (
     <AppShell currentPage="funds">
@@ -65,7 +69,7 @@ export default function FundsPage() {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-3xl font-bold text-foreground">Funds</h1>
-            <p className="text-secondary mt-1">Your Susu circles</p>
+            <p className="text-secondary mt-1">Your savings circles &amp; fundraisers</p>
           </div>
           <Link
             href="/create"
@@ -103,17 +107,38 @@ export default function FundsPage() {
 
         {!isLoading && !isError && (
           <>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {filtered.map((fund) => (
-                <FundCard key={fund.id} fund={fund} />
-              ))}
-            </div>
-            {filtered.length === 0 && (
+            {filtered.length > 0 && (
+              <section className="space-y-3">
+                {filteredMedical.length > 0 && (
+                  <h2 className="text-xs font-semibold text-secondary uppercase tracking-wide">Susu circles</h2>
+                )}
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {filtered.map((fund) => (
+                    <FundCard key={fund.id} fund={fund} />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {filteredMedical.length > 0 && (
+              <section className="space-y-3">
+                <h2 className="text-xs font-semibold text-secondary uppercase tracking-wide">Medical fundraisers</h2>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {filteredMedical.map((m) => (
+                    <MedicalFundCard key={m.id} f={m} />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {filtered.length === 0 && filteredMedical.length === 0 && (
               <div className="text-center py-12">
-                <p className="text-secondary">You haven&apos;t joined any Susu yet.</p>
-                <Link href="/create" className="cp-btn-primary mt-4 inline-flex">
-                  <Plus className="h-4 w-4" /> Create your first Susu
-                </Link>
+                <p className="text-secondary">{search ? 'No funds match your search.' : 'You haven’t created any funds yet.'}</p>
+                {!search && (
+                  <Link href="/create" className="cp-btn-primary mt-4 inline-flex">
+                    <Plus className="h-4 w-4" /> Create your first fund
+                  </Link>
+                )}
               </div>
             )}
           </>

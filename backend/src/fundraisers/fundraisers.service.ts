@@ -246,6 +246,28 @@ export class FundraisersService implements OnModuleInit {
     return { ok: true as const, externalref, amount }
   }
 
+  /** Medical fundraisers the current user organizes (created). For the Funds list + dashboard. */
+  async myFundraisers(userId: string) {
+    const funds = await this.db.fund.findMany({
+      where: { type: 'Medical', createdById: userId },
+      include: { fundraiser: true },
+      orderBy: { createdAt: 'desc' },
+    })
+    return funds
+      .filter((f) => f.fundraiser)
+      .map((f) => ({
+        id: f.id,
+        slug: f.fundraiser!.slug,
+        name: f.name,
+        beneficiary: f.fundraiser!.beneficiary,
+        goal: f.fundraiser!.goal,
+        raised: f.fundraiser!.raised,
+        progressPercent: progress(f.fundraiser!.raised, f.fundraiser!.goal),
+        verificationStatus: f.fundraiser!.verificationStatus,
+        status: f.status,
+      }))
+  }
+
   // ---------- in-app detail ----------
 
   async detail(userId: string, fundId: string) {

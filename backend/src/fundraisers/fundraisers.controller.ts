@@ -14,7 +14,7 @@ import { CurrentUser } from '../common/auth/current-user.decorator'
 import type { AuthUser } from '../common/auth/auth-user'
 import { FundraisersService } from './fundraisers.service'
 import { CreateMedicalFundDto, VerifyPayeeDto } from './dto/fundraisers.dto'
-import { FundraiserDto } from './dto/fundraisers-responses.dto'
+import { FundraiserDto, MyFundraiserDto } from './dto/fundraisers-responses.dto'
 
 @ApiTags('fundraisers')
 @ApiCookieAuth('access_token')
@@ -28,6 +28,13 @@ export class FundraisersController {
   @ApiCreatedResponse({ type: FundraiserDto })
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateMedicalFundDto) {
     return this.fundraisers.createMedical(user.id, dto)
+  }
+
+  @Get('mine')
+  @ApiOperation({ summary: 'Medical fundraisers the current user organizes' })
+  @ApiOkResponse({ type: [MyFundraiserDto] })
+  mine(@CurrentUser() user: AuthUser) {
+    return this.fundraisers.myFundraisers(user.id)
   }
 
   @Get(':id')

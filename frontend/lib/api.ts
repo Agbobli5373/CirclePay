@@ -201,6 +201,17 @@ export interface Fundraiser extends PublicFundraiser {
   isOwner: boolean
   payeeName: string | null
 }
+export interface MyFundraiser {
+  id: string
+  slug: string
+  name: string
+  beneficiary: string
+  goal: number
+  raised: number
+  progressPercent: number
+  verificationStatus: 'unverified' | 'pending' | 'verified' | 'rejected'
+  status: string
+}
 export type DonateState = 'otp_required' | 'initiated' | 'settled' | 'failed'
 export interface DonateResult {
   state: DonateState
@@ -295,6 +306,7 @@ export const api = {
   },
   fundraisers: {
     create: (body: CreateMedicalPayload) => request<Fundraiser>('/fundraisers', { method: 'POST', body }),
+    mine: () => request<MyFundraiser[]>('/fundraisers/mine'),
     detail: (id: string) => request<Fundraiser>(`/fundraisers/${id}`),
     verifyPayee: (id: string, decision: 'verified' | 'rejected', note?: string) =>
       request<{ ok: true; verificationStatus: string }>(`/fundraisers/${id}/verify-payee`, { method: 'POST', body: { decision, note } }),

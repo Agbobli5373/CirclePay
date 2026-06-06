@@ -66,6 +66,36 @@ export class FundraiserDto extends PublicFundraiserDto {
   payeeName!: string
 }
 
+/** Compact medical fundraiser card for the organizer's Funds list / dashboard. */
+export class MyFundraiserDto {
+  @ApiProperty({ example: 'cmsfundid' })
+  id!: string
+
+  @ApiProperty({ example: 'help-kofi-a1b2c3' })
+  slug!: string
+
+  @ApiProperty({ example: 'Help Kofi get surgery' })
+  name!: string
+
+  @ApiProperty({ example: 'Kofi Mensah' })
+  beneficiary!: string
+
+  @ApiProperty({ example: 500000 })
+  goal!: number
+
+  @ApiProperty({ example: 320000 })
+  raised!: number
+
+  @ApiProperty({ example: 64 })
+  progressPercent!: number
+
+  @ApiProperty({ example: 'verified', enum: ['unverified', 'pending', 'verified', 'rejected'] })
+  verificationStatus!: string
+
+  @ApiProperty({ example: 'active', enum: ['active', 'completed', 'cancelled'] })
+  status!: string
+}
+
 /** Result of a public donation attempt. */
 export class DonateResultDto {
   @ApiProperty({ example: 'otp_required', enum: ['otp_required', 'initiated', 'settled', 'failed'] })
