@@ -174,6 +174,61 @@ export interface ContributionStatus {
   settledAt: string | null
 }
 
+// ----- Medical fundraising (EM) -----
+
+export interface DonorView {
+  displayName: string
+  amount: number
+  ts: string
+}
+export interface PublicFundraiser {
+  slug: string
+  name: string
+  beneficiary: string
+  hospital: string | null
+  story: string | null
+  goal: number
+  raised: number
+  progressPercent: number
+  deadline: string | null
+  payoutRoute: 'hospital_momo' | 'hospital_bank'
+  verificationStatus: 'unverified' | 'pending' | 'verified' | 'rejected'
+  contributors: DonorView[]
+}
+export interface Fundraiser extends PublicFundraiser {
+  id: string
+  status: string
+  isOwner: boolean
+  payeeName: string | null
+}
+export type DonateState = 'otp_required' | 'initiated' | 'settled' | 'failed'
+export interface DonateResult {
+  state: DonateState
+  externalref: string
+  amount: number
+}
+export interface CreateMedicalPayload {
+  type: 'Medical'
+  name: string
+  goal: number // pesewas
+  beneficiary: string
+  story: string
+  hospital?: string
+  payoutRoute: 'hospital_momo' | 'hospital_bank'
+  payee: { name: string; momo?: string; network?: Network; bank?: string }
+  deadline?: string
+  shareable: boolean
+}
+export interface DonatePayload {
+  donationId: string
+  phone: string
+  network: Network
+  amount: number // pesewas
+  displayName?: string
+  anonymous: boolean
+  otpcode?: string
+}
+
 // ----- Request payloads -----
 
 export interface CreateSusuPayload {
@@ -237,5 +292,22 @@ export const api = {
   },
   activity: {
     list: () => request<ActivityItem[]>('/activity'),
+  },
+  fundraisers: {
+    create: (body: CreateMedicalPayload) => request<Fundraiser>('/fundraisers', { method: 'POST', body }),
+    detail: (id: string) => request<Fundraiser>(`/fundraisers/${id}`),
+    verifyPayee: (id: string, decision: 'verified' | 'rejected', note?: string) =>
+      request<{ ok: true; verificationStatus: string }>(`/fundraisers/${id}/verify-payee`, { method: 'POST', body: { decision, note } }),
+    release: (id: string) =>
+      request<{ ok: true; externalref: string; amount: number }>(`/fundraisers/${id}/release`, { method: 'POST' }),
+  },
+  public: {
+    fundraiser: (slug: string) => request<PublicFundraiser>(`/public/fundraisers/${encodeURIComponent(slug)}`),
+    donate: (slug: string, body: DonatePayload) =>
+      request<DonateResult>(`/public/fundraisers/${encodeURIComponent(slug)}/contribute`, { method: 'POST', body }),
+    donationStatus: (slug: string, donationId: string) =>
+      request<{ status: DonateState; amount: number }>(
+        `/public/fundraisers/${encodeURIComponent(slug)}/donations/${encodeURIComponent(donationId)}`,
+      ),
   },
 }

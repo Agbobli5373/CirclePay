@@ -7,8 +7,8 @@ import { toast } from 'sonner'
 import { AppShell } from '@/components/app-shell'
 import { Users, Heart, Sparkles, CheckCircle2, BadgeCheck, Share2, UserPlus, ArrowRight, ArrowLeft, Plus, X, Copy, Check, MessageCircle, Loader2 } from 'lucide-react'
 import { toPesewas } from '@circlepay/shared'
-import { useCreateFund, useInvite } from '@/lib/queries'
-import { ApiError } from '@/lib/api'
+import { useCreateFund, useInvite, useCreateMedical } from '@/lib/queries'
+import { ApiError, type Network } from '@/lib/api'
 
 type FundType = 'Susu' | 'Medical'
 type Frequency = 'Weekly' | 'Monthly'
@@ -38,11 +38,18 @@ export default function CreateFundPage() {
   const [story, setStory] = useState('')
   const [deadline, setDeadline] = useState('')
   const [shareable, setShareable] = useState(true)
+  const [payoutRoute, setPayoutRoute] = useState<'hospital_momo' | 'hospital_bank'>('hospital_bank')
+  const [payeeName, setPayeeName] = useState('')
+  const [payeeMomo, setPayeeMomo] = useState('')
+  const [payeeNetwork, setPayeeNetwork] = useState<Network>('MTN')
+  const [payeeBank, setPayeeBank] = useState('')
 
   const [submitted, setSubmitted] = useState(false)
   const [createdFundId, setCreatedFundId] = useState<string | null>(null)
+  const [createdSlug, setCreatedSlug] = useState<string | null>(null)
   const router = useRouter()
   const createFund = useCreateFund()
+  const createMedical = useCreateMedical()
   const invite = useInvite(createdFundId ?? '')
 
   // Invite flow (Susu) — invites store raw 9-digit numbers
@@ -57,8 +64,30 @@ export default function CreateFundPage() {
   async function handleCreate() {
     if (!canSubmit) return
     if (!isSusu) {
-      // Medical fundraising isn't wired to the backend yet (EM epic).
-      toast.info('Medical fundraising is coming soon — Susu is live.')
+      try {
+        const res = await createMedical.mutateAsync({
+          type: 'Medical',
+          name,
+          goal: toPesewas(goalNum),
+          beneficiary,
+          story,
+          hospital: hospital || undefined,
+          payoutRoute,
+          payee: {
+            name: payeeName,
+            momo: payoutRoute === 'hospital_momo' ? `+233${payeeMomo}` : undefined,
+            network: payoutRoute === 'hospital_momo' ? payeeNetwork : undefined,
+            bank: payoutRoute === 'hospital_bank' ? payeeBank : undefined,
+          },
+          deadline: deadline ? new Date(`${deadline}T00:00:00Z`).toISOString() : undefined,
+          shareable,
+        })
+        setCreatedFundId(res.id)
+        setCreatedSlug(res.slug)
+        setSubmitted(true)
+      } catch (e) {
+        toast.error(e instanceof ApiError ? e.message : 'Could not create fundraiser')
+      }
       return
     }
     try {
@@ -100,9 +129,10 @@ export default function CreateFundPage() {
   const periodLabel = frequency === 'Weekly' ? 'weeks' : 'months'
   const cyclePot = amountNum > 0 && membersNum > 0 ? amountNum * membersNum : 0
 
+  const payeeOk = payoutRoute === 'hospital_momo' ? payeeMomo.replace(/\D/g, '').length >= 9 : payeeBank.trim().length > 0
   const canSubmit = isSusu
     ? Boolean(name && amountNum > 0 && membersNum > 0)
-    : Boolean(name && goalNum > 0 && beneficiary && story)
+    : Boolean(name && goalNum > 0 && beneficiary && story && payeeName && payeeOk)
 
   const inviteLink = `circlepay.app/join/${(name || 'fund').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}`
   const fmtPhone = (d: string) => `${d.slice(0, 2)} ${d.slice(2, 5)} ${d.slice(5, 9)}`
@@ -313,13 +343,13 @@ export default function CreateFundPage() {
                   Invite members
                 </button>
               ) : (
-                <Link href="/f/kofi-mensah" className="cp-btn-primary w-full">
+                <Link href={`/f/${createdSlug ?? ''}`} className="cp-btn-primary w-full">
                   <Share2 className="h-4 w-4" />
                   Share fund
                 </Link>
               )}
               <Link
-                href={isSusu ? susuHref : '/funds/kofi-mensah'}
+                href={isSusu ? susuHref : `/fundraisers/${createdFundId ?? ''}`}
                 className="cp-btn-ghost w-full"
               >
                 Go to fund
@@ -520,14 +550,55 @@ export default function CreateFundPage() {
                 <Toggle on={shareable} onClick={() => setShareable((v) => !v)} label="Shareable link" />
               </div>
 
-              {/* Payout rule (read-only) */}
-              <div className="flex items-center justify-between rounded-xl bg-primary/5 p-3">
-                <span className="text-xs font-medium text-secondary">Payout</span>
-                <span className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-                  <BadgeCheck className="h-4 w-4 text-primary" />
-                  Direct to verified hospital
-                </span>
-              </div>
+              {/* Payout route — money goes straight to the verified payee, never the organizer */}
+              <Field label="Where do funds go?">
+                <div className="grid grid-cols-2 gap-2">
+                  <Pill active={payoutRoute === 'hospital_bank'} onClick={() => setPayoutRoute('hospital_bank')}>Hospital bank</Pill>
+                  <Pill active={payoutRoute === 'hospital_momo'} onClick={() => setPayoutRoute('hospital_momo')}>Hospital MoMo</Pill>
+                </div>
+                <p className="text-xs text-secondary mt-1.5 flex items-center gap-1.5">
+                  <BadgeCheck className="h-3.5 w-3.5 text-primary" />
+                  Ops verifies the payee before any payout. CirclePay never holds the money.
+                </p>
+              </Field>
+
+              <Field label="Payee name">
+                <input
+                  value={payeeName}
+                  onChange={(e) => setPayeeName(e.target.value)}
+                  placeholder={payoutRoute === 'hospital_bank' ? 'e.g. Korle Bu Teaching Hospital' : 'e.g. Korle Bu MoMo merchant'}
+                  className="cp-input"
+                />
+              </Field>
+
+              {payoutRoute === 'hospital_bank' ? (
+                <Field label="Hospital bank account">
+                  <input
+                    value={payeeBank}
+                    onChange={(e) => setPayeeBank(e.target.value)}
+                    placeholder="Account number"
+                    className="cp-input"
+                  />
+                </Field>
+              ) : (
+                <Field label="Hospital MoMo number">
+                  <div className="flex items-center h-12 rounded-xl border border-border bg-card px-3 focus-within:border-primary">
+                    <span className="text-sm font-medium text-foreground border-r border-border pr-2 mr-2 whitespace-nowrap">🇬🇭 +233</span>
+                    <input
+                      inputMode="numeric"
+                      value={payeeMomo}
+                      onChange={(e) => setPayeeMomo(e.target.value.replace(/\D/g, '').slice(0, 9))}
+                      placeholder="XX XXX XXXX"
+                      className="flex-1 min-w-0 bg-transparent text-base text-foreground placeholder:text-secondary focus:outline-none"
+                    />
+                  </div>
+                  <div className="flex gap-2 mt-2">
+                    {(['MTN', 'Telecel', 'AirtelTigo'] as const).map((n) => (
+                      <Pill key={n} active={payeeNetwork === n} onClick={() => setPayeeNetwork(n)}>{n}</Pill>
+                    ))}
+                  </div>
+                </Field>
+              )}
 
               {/* Live summary */}
               {goalNum > 0 && beneficiary && (
@@ -547,11 +618,11 @@ export default function CreateFundPage() {
           </Link>
           <button
             type="button"
-            disabled={!canSubmit || createFund.isPending}
+            disabled={!canSubmit || createFund.isPending || createMedical.isPending}
             onClick={handleCreate}
             className="cp-btn-primary flex-1"
           >
-            {createFund.isPending ? (
+            {createFund.isPending || createMedical.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <>

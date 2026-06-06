@@ -1,7 +1,7 @@
 'use client'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, type CreateSusuPayload } from './api'
+import { api, type CreateSusuPayload, type CreateMedicalPayload } from './api'
 
 export const qk = {
   me: ['me'] as const,
@@ -85,6 +85,40 @@ export function useRevokeInvite(fundId: string) {
       qc.invalidateQueries({ queryKey: ['fund-invites', fundId] })
       qc.invalidateQueries({ queryKey: qk.fund(fundId) })
     },
+  })
+}
+
+// ----- Medical fundraising (EM) -----
+
+export function useCreateMedical() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: CreateMedicalPayload) => api.fundraisers.create(body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['funds'] }),
+  })
+}
+
+export function useFundraiser(id: string) {
+  return useQuery({ queryKey: ['fundraiser', id], queryFn: () => api.fundraisers.detail(id), enabled: !!id })
+}
+
+export function usePublicFundraiser(slug: string) {
+  return useQuery({ queryKey: ['public-fundraiser', slug], queryFn: () => api.public.fundraiser(slug), enabled: !!slug })
+}
+
+export function useVerifyPayee(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (decision: 'verified' | 'rejected') => api.fundraisers.verifyPayee(id, decision),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['fundraiser', id] }),
+  })
+}
+
+export function useReleasePayout(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.fundraisers.release(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['fundraiser', id] }),
   })
 }
 
