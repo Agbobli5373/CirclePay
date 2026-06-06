@@ -570,7 +570,6 @@ export default function CreateFundPage() {
                 </p>
               </Field>
 
-              <div className="grid gap-4 sm:grid-cols-2 sm:items-start">
               <Field label="Payee name">
                 <input
                   value={payeeName}
@@ -603,12 +602,22 @@ export default function CreateFundPage() {
                   </div>
                   <div className="flex gap-2 mt-2">
                     {(['MTN', 'Telecel', 'AirtelTigo'] as const).map((n) => (
-                      <Pill key={n} active={payeeNetwork === n} onClick={() => setPayeeNetwork(n)}>{n}</Pill>
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => setPayeeNetwork(n)}
+                        className={`h-8 rounded-full px-3 text-xs font-medium transition-colors ${
+                          payeeNetwork === n
+                            ? 'bg-primary text-primary-foreground'
+                            : 'border border-border text-secondary hover:text-foreground hover:border-primary/40'
+                        }`}
+                      >
+                        {n}
+                      </button>
                     ))}
                   </div>
                 </Field>
               )}
-              </div>
 
               {/* Live summary */}
               {goalNum > 0 && beneficiary && (
@@ -720,7 +729,7 @@ function Pill({ active, onClick, children }: { active: boolean; onClick: () => v
     <button
       type="button"
       onClick={onClick}
-      className={`h-11 rounded-full text-sm font-medium transition-colors ${
+      className={`h-11 rounded-full px-4 text-sm font-medium transition-colors ${
         active ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-foreground hover:border-primary/40'
       }`}
     >
