@@ -76,7 +76,7 @@ export default function ProfilePage() {
 
   return (
     <AppShell currentPage="profile">
-      <div className="space-y-6 pb-6 max-w-3xl">
+      <div className="max-w-5xl mx-auto pb-6 space-y-6">
         {me.trust?.standing === 'locked' && (
           <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-4 flex items-start gap-3">
             <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
@@ -89,6 +89,9 @@ export default function ProfilePage() {
           </div>
         )}
 
+        <div className="lg:grid lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:items-start lg:gap-6 space-y-6 lg:space-y-0">
+        {/* Left column: identity + trust */}
+        <div className="space-y-6">
         {/* Identity */}
         <div className="cp-card p-5 flex items-center gap-4">
           <div className="h-16 w-16 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xl font-semibold flex-shrink-0">
@@ -166,7 +169,11 @@ export default function ProfilePage() {
           </p>
         </div>
 
-        {/* Security settings (device-side preferences) */}
+        </div>{/* /left column */}
+
+        {/* Right column: security + sign out */}
+        <div className="space-y-6">
+        {/* Security */}
         <div className="space-y-2">
           <h2 className="text-lg font-semibold text-foreground px-1">Security</h2>
           <div className="cp-card divide-y divide-border overflow-hidden">
@@ -215,6 +222,8 @@ export default function ProfilePage() {
         >
           {logout.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sign out'}
         </button>
+        </div>{/* /right column */}
+        </div>{/* /grid */}
 
         <ChangePinDialog open={showChangePin} onClose={() => setShowChangePin(false)} />
       </div>
