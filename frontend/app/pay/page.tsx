@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { Logo } from '@/components/logo'
+import { OtpInput } from '@/components/otp-input'
 import { ShieldCheck, CheckCircle2, X, Loader2, AlertCircle } from 'lucide-react'
 import { formatGhs } from '@circlepay/shared'
 import { api, ApiError, type ContributionResult } from '@/lib/api'
@@ -144,13 +145,7 @@ function PayInner() {
             <h1 className="text-2xl font-semibold text-foreground">Approve on your phone</h1>
             <p className="text-sm text-secondary">Enter the MoMo OTP / voucher code to authorise {formatGhs(total)}.</p>
           </div>
-          <input
-            inputMode="numeric"
-            value={otp}
-            onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 8))}
-            placeholder="Enter code"
-            className="cp-input text-center tracking-widest text-lg"
-          />
+          <OtpInput value={otp} onChange={setOtp} autoFocus ariaLabel="MoMo OTP / voucher code" />
           <button
             onClick={() => submit(otp)}
             disabled={otp.length < 4 || busy}

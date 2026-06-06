@@ -7,6 +7,7 @@ import { Logo } from '@/components/logo'
 import { BadgeCheck, ShieldCheck, MessageCircle, Copy, Loader2, AlertCircle, CheckCircle2, Heart } from 'lucide-react'
 import { formatGhs, toPesewas } from '@circlepay/shared'
 import { usePublicFundraiser } from '@/lib/queries'
+import { OtpInput } from '@/components/otp-input'
 import { api, ApiError, type Network, type DonateState } from '@/lib/api'
 
 const NETWORKS: Network[] = ['MTN', 'Telecel', 'AirtelTigo']
@@ -231,7 +232,7 @@ function DonatePanel({ slug, onClose, onSettled }: { slug: string; onClose: () =
       <div className="rounded-xl border border-border p-4 space-y-3 text-left">
         <p className="text-sm font-medium text-foreground">Approve on your phone</p>
         <p className="text-xs text-secondary">Enter the code sent to +233 {phone}.</p>
-        <input inputMode="numeric" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 8))} placeholder="Enter code" className="cp-input" />
+        <OtpInput value={otp} onChange={setOtp} autoFocus ariaLabel="SMS code" />
         <button onClick={() => submit(otp)} disabled={otp.length < 4} className="cp-btn-primary w-full">Authorise donation</button>
       </div>
     )

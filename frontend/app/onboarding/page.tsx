@@ -3,54 +3,16 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { ShieldCheck, ArrowRight, Delete, Loader2 } from 'lucide-react'
+import { ShieldCheck, ArrowRight, Loader2 } from 'lucide-react'
 import { Logo } from '@/components/logo'
+import { OtpInput } from '@/components/otp-input'
+import { PinInput } from '@/components/pin-input'
 import { api, ApiError, type Network as ApiNetwork } from '@/lib/api'
 
 type Step = 'phone' | 'otp' | 'pin'
 
 const networks = ['MTN', 'Telecel', 'AirtelTigo'] as const
 type Network = (typeof networks)[number]
-
-function NumericKeypad({
-  onPress,
-  onDelete,
-}: {
-  onPress: (digit: string) => void
-  onDelete: () => void
-}) {
-  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9']
-  return (
-    <div className="grid grid-cols-3 gap-2">
-      {keys.map((k) => (
-        <button
-          key={k}
-          type="button"
-          onClick={() => onPress(k)}
-          className="h-14 rounded-xl bg-card border border-border text-xl font-semibold text-foreground hover:bg-muted transition-colors"
-        >
-          {k}
-        </button>
-      ))}
-      <div />
-      <button
-        type="button"
-        onClick={() => onPress('0')}
-        className="h-14 rounded-xl bg-card border border-border text-xl font-semibold text-foreground hover:bg-muted transition-colors"
-      >
-        0
-      </button>
-      <button
-        type="button"
-        onClick={onDelete}
-        className="h-14 rounded-xl text-foreground hover:bg-muted transition-colors flex items-center justify-center"
-        aria-label="Delete"
-      >
-        <Delete className="h-5 w-5" />
-      </button>
-    </div>
-  )
-}
 
 export default function OnboardingPage() {
   const router = useRouter()
@@ -145,18 +107,20 @@ export default function OnboardingPage() {
 
   const timer = `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`
 
-  const handleOtpPress = (digit: string) => {
-    setOtp((prev) => (prev.length < 6 ? prev + digit : prev))
-  }
-
   const activePin = pinStage === 'create' ? pin : confirmPin
   const setActivePin = pinStage === 'create' ? setPin : setConfirmPin
 
-  // Append with a functional updater so rapid presses accumulate correctly.
-  const handlePinPress = (digit: string) => {
+  // Clear the mismatch error as soon as the user starts re-entering.
+  const handlePinChange = (v: string) => {
     if (pinError) setPinError(false)
-    setActivePin((prev) => (prev.length < 4 ? prev + digit : prev))
+    setActivePin(v)
   }
+
+  // Auto-submit the OTP once all 6 digits are in (matches the native autofill experience).
+  useEffect(() => {
+    if (step === 'otp' && otp.length === 6 && !busy) void handleVerify()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [otp, step])
 
   // Stage transitions are driven by the committed PIN values (robust to input speed).
   useEffect(() => {
@@ -268,21 +232,7 @@ export default function OnboardingPage() {
                   </p>
                 </div>
 
-                <div className="flex justify-between gap-2">
-                  {Array.from({ length: 6 }).map((_, i) => {
-                    const isActive = i === otp.length
-                    return (
-                      <div
-                        key={i}
-                        className={`flex-1 aspect-square max-w-[52px] rounded-xl border flex items-center justify-center text-xl font-semibold text-foreground ${
-                          isActive ? 'border-primary ring-2 ring-primary/40' : 'border-border'
-                        } bg-background`}
-                      >
-                        {otp[i] ?? ''}
-                      </div>
-                    )
-                  })}
-                </div>
+                <OtpInput value={otp} onChange={setOtp} length={6} autoFocus ariaLabel="One-time code" />
 
                 <div className="flex items-center justify-between text-sm">
                   {secondsLeft > 0 ? (
@@ -300,13 +250,6 @@ export default function OnboardingPage() {
                   <span className="text-secondary">
                     Try USSD: <span className="font-medium text-foreground">*714#</span>
                   </span>
-                </div>
-
-                <div className="sm:max-w-[280px] sm:mx-auto">
-                  <NumericKeypad
-                    onPress={handleOtpPress}
-                    onDelete={() => setOtp((p) => p.slice(0, -1))}
-                  />
                 </div>
 
                 <button
@@ -352,37 +295,17 @@ export default function OnboardingPage() {
                   </div>
                 )}
 
-                <div className="flex justify-center gap-4">
-                  {Array.from({ length: 4 }).map((_, i) => {
-                    const filled = i < activePin.length
-                    return (
-                      <div
-                        key={i}
-                        className={`h-5 w-5 rounded-full border-2 transition-colors ${
-                          pinError
-                            ? 'border-destructive bg-destructive'
-                            : filled
-                            ? 'border-primary bg-primary'
-                            : 'border-border bg-transparent'
-                        }`}
-                      />
-                    )
-                  })}
-                </div>
+                <PinInput
+                  value={activePin}
+                  onChange={handlePinChange}
+                  autoFocus
+                  error={pinError}
+                  ariaLabel={pinStage === 'create' ? 'Create PIN' : 'Confirm PIN'}
+                />
 
                 {pinError && (
                   <p className="text-center text-sm text-destructive">PINs don&apos;t match. Try again.</p>
                 )}
-
-                <div className="sm:max-w-[280px] sm:mx-auto">
-                  <NumericKeypad
-                    onPress={handlePinPress}
-                    onDelete={() => {
-                      if (pinError) setPinError(false)
-                      setActivePin((prev) => prev.slice(0, -1))
-                    }}
-                  />
-                </div>
 
                 <p className="text-xs text-secondary text-center leading-relaxed bg-primary/5 rounded-lg p-3">
                   CirclePay never holds your savings and will never ask for your PIN by call or SMS.
