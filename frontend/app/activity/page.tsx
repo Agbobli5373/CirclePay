@@ -21,13 +21,37 @@ const iconFor: Record<ActivityItem['type'], { icon: typeof ArrowUpRight; bg: str
   joined: { icon: UserPlus, bg: 'bg-muted', color: 'text-secondary' },
 }
 
-function formatWhen(iso: string): string {
+function startOfDay(d: Date): number {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+}
+
+/** Date-group label: Today / Yesterday / "12 June" (+ year if not this year). */
+function groupLabel(iso: string): string {
   const d = new Date(iso)
-  const diff = (Date.now() - d.getTime()) / 1000
-  if (diff < 60) return 'Just now'
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-  return d.toLocaleDateString('en-GH', { day: 'numeric', month: 'short' })
+  const diffDays = Math.round((startOfDay(new Date()) - startOfDay(d)) / 86_400_000)
+  if (diffDays <= 0) return 'Today'
+  if (diffDays === 1) return 'Yesterday'
+  return d.toLocaleDateString('en-GH', {
+    day: 'numeric',
+    month: 'long',
+    year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric',
+  })
+}
+
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('en-GH', { hour: 'numeric', minute: '2-digit' })
+}
+
+/** Group items into date sections, preserving the (chronological) order they arrive in. */
+function groupByDay(items: ActivityItem[]): { label: string; items: ActivityItem[] }[] {
+  const groups: { label: string; items: ActivityItem[] }[] = []
+  for (const item of items) {
+    const label = groupLabel(item.createdAt)
+    const last = groups[groups.length - 1]
+    if (last && last.label === label) last.items.push(item)
+    else groups.push({ label, items: [item] })
+  }
+  return groups
 }
 
 export default function ActivityPage() {
@@ -35,12 +59,13 @@ export default function ActivityPage() {
   const { data: activity, isLoading, isError } = useActivity()
 
   const filtered = (activity ?? []).filter((a) => filter === 'all' || a.type === filter)
+  const groups = groupByDay(filtered)
 
   return (
     <AppShell currentPage="activity">
-      <div className="space-y-6 pb-6 max-w-3xl">
+      <div className="max-w-2xl mx-auto space-y-6 pb-6">
         <div>
-          <h1 className="text-2xl font-bold text-foreground lg:hidden">Activity</h1>
+          <h1 className="text-2xl font-bold text-foreground">Activity</h1>
           <p className="text-secondary mt-1">Your contributions, payouts and donations</p>
         </div>
 
@@ -68,37 +93,44 @@ export default function ActivityPage() {
 
         {isError && <p className="text-center py-12 text-secondary">Could not load your activity.</p>}
 
-        {!isLoading && !isError && (
-          <div className="space-y-2">
-            {filtered.map((item) => {
-              const { icon: Icon, bg, color } = iconFor[item.type]
-              return (
-                <div key={item.id} className="flex items-start gap-3 cp-card p-4">
-                  <div className={`h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0 ${bg}`}>
-                    <Icon className={`h-5 w-5 ${color}`} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground">{item.title}</p>
-                    <p className="text-xs text-secondary mt-0.5">{item.detail}</p>
-                    {item.reference && <p className="text-xs text-secondary mt-1 break-all">Ref: {item.reference}</p>}
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    {item.amount != null && (
-                      <p className={`text-sm font-semibold ${item.direction === 'in' ? 'text-primary' : 'text-foreground'}`}>
-                        {item.direction === 'in' ? '+' : '−'} {formatGhs(item.amount)}
-                      </p>
-                    )}
-                    <p className="text-xs text-secondary mt-0.5 whitespace-nowrap">{formatWhen(item.createdAt)}</p>
-                  </div>
+        {!isLoading && !isError && groups.length > 0 && (
+          <div className="space-y-6">
+            {groups.map((group) => (
+              <section key={group.label} className="space-y-2">
+                <h2 className="px-1 text-xs font-semibold uppercase tracking-wide text-secondary">{group.label}</h2>
+                <div className="cp-card divide-y divide-border overflow-hidden">
+                  {group.items.map((item) => {
+                    const { icon: Icon, bg, color } = iconFor[item.type]
+                    return (
+                      <div key={item.id} className="flex items-start gap-3 p-4">
+                        <div className={`h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0 ${bg}`}>
+                          <Icon className={`h-5 w-5 ${color}`} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground">{item.title}</p>
+                          <p className="text-xs text-secondary mt-0.5">{item.detail}</p>
+                          {item.reference && <p className="text-xs text-secondary mt-1 break-all">Ref: {item.reference}</p>}
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          {item.amount != null && (
+                            <p className={`text-sm font-semibold tabular-nums ${item.direction === 'in' ? 'text-primary' : 'text-foreground'}`}>
+                              {item.direction === 'in' ? '+' : '−'} {formatGhs(item.amount)}
+                            </p>
+                          )}
+                          <p className="text-xs text-secondary mt-0.5 whitespace-nowrap">{formatTime(item.createdAt)}</p>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
-              )
-            })}
+              </section>
+            ))}
+          </div>
+        )}
 
-            {filtered.length === 0 && (
-              <div className="text-center py-12">
-                <p className="text-secondary">No activity yet — contribute to a Susu to get started.</p>
-              </div>
-            )}
+        {!isLoading && !isError && groups.length === 0 && (
+          <div className="cp-card p-10 text-center">
+            <p className="text-secondary">No activity yet — contribute to a Susu to get started.</p>
           </div>
         )}
       </div>
