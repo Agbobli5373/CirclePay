@@ -66,28 +66,28 @@ export default function FundsPage() {
   return (
     <AppShell currentPage="funds">
       <div className="space-y-6 pb-6">
-        <div className="flex items-start justify-between">
-          <div>
+        {/* Title bar: title | search (constrained) | action — one row on desktop, stacked on mobile */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex-1 min-w-0">
             <h1 className="text-3xl font-bold text-foreground">Funds</h1>
             <p className="text-secondary mt-1">Your savings circles &amp; fundraisers</p>
           </div>
+          <div className="relative w-full sm:w-64 shrink-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary pointer-events-none" />
+            <Input
+              placeholder="Search your funds..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-10 h-10 bg-card border-border"
+            />
+          </div>
           <Link
             href="/create"
-            className="rounded-full bg-primary hover:bg-primary/90 text-primary-foreground flex items-center gap-2 px-5 py-2.5 text-sm font-medium transition-colors"
+            className="rounded-full bg-primary hover:bg-primary/90 text-primary-foreground flex items-center gap-2 px-5 py-2.5 text-sm font-medium transition-colors shrink-0"
           >
             <Plus className="h-4 w-4" />
             Create Fund
           </Link>
-        </div>
-
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary" />
-          <Input
-            placeholder="Search your funds..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10 h-10 bg-card border-border"
-          />
         </div>
 
         {isLoading && (
