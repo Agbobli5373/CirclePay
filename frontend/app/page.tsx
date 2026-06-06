@@ -44,9 +44,9 @@ export default function Home() {
         {/* Row 1: Per-cycle commitment + next payout */}
         <div className="grid gap-5 lg:grid-cols-3">
           {/* Commitment Card */}
-          <div className="lg:col-span-2 cp-gradient rounded-3xl p-6 lg:p-8 text-white">
+          <div className="lg:col-span-2 cp-gradient rounded-2xl p-5 lg:p-6 text-white">
             <p className="text-sm font-medium text-white/80">You contribute each cycle</p>
-            <p className="text-4xl lg:text-5xl font-bold mt-2 tracking-tight">{formatGhs(totalPerCycle)}</p>
+            <p className="text-3xl lg:text-4xl font-bold mt-2 tracking-tight">{formatGhs(totalPerCycle)}</p>
             <span className="inline-flex items-center gap-1 mt-3 text-sm font-semibold bg-white/20 rounded-full px-3 py-1">
               <ArrowUpRight className="h-4 w-4" />
               {activeCount} active circle{activeCount === 1 ? '' : 's'}
@@ -69,11 +69,11 @@ export default function Home() {
           </div>
 
           {/* Next payout card */}
-          <div className="cp-card p-6 flex flex-col">
+          <div className="cp-card p-5 flex flex-col">
             <p className="text-sm font-medium text-foreground">Your next payout</p>
             {nextTurn ? (
               <div className="flex-1 flex flex-col justify-center mt-3">
-                <p className="text-3xl font-bold text-primary tracking-tight">{formatGhs(nextTurn.potPesewas)}</p>
+                <p className="text-2xl font-bold text-primary tracking-tight">{formatGhs(nextTurn.potPesewas)}</p>
                 <p className="text-sm text-foreground mt-2 font-medium truncate">{nextTurn.name}</p>
                 <p className="text-xs text-secondary mt-1">
                   Cycle {nextTurn.myNextPayoutCycle} of {nextTurn.totalCycles}

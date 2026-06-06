@@ -40,7 +40,7 @@ export default function ActivityPage() {
     <AppShell currentPage="activity">
       <div className="space-y-6 pb-6 max-w-3xl">
         <div>
-          <h1 className="text-3xl font-bold text-foreground lg:hidden">Activity</h1>
+          <h1 className="text-2xl font-bold text-foreground lg:hidden">Activity</h1>
           <p className="text-secondary mt-1">Your contributions, payouts and donations</p>
         </div>
 

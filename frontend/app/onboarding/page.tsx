@@ -224,7 +224,7 @@ export default function OnboardingPage() {
 
       <div className="flex-1 flex items-start sm:items-center justify-center px-4 py-6 sm:py-10">
         <div className="w-full max-w-md">
-          <div className="cp-card p-6 sm:p-8">
+          <div className="cp-card p-5 sm:p-6">
 
             {/* PHONE */}
             {step === 'phone' && (
@@ -240,7 +240,7 @@ export default function OnboardingPage() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-foreground">Mobile money number</label>
-                  <div className="flex items-center h-12 rounded-xl border border-border bg-background px-3 focus-within:ring-2 focus-within:ring-primary">
+                  <div className="flex items-center h-11 rounded-lg border border-border bg-background px-3 focus-within:ring-2 focus-within:ring-primary">
                     <span className="flex items-center gap-1.5 text-sm font-medium text-foreground border-r border-border pr-3 mr-3">
                       <span aria-hidden>🇬🇭</span> +233
                     </span>
@@ -279,7 +279,7 @@ export default function OnboardingPage() {
                   type="button"
                   onClick={() => (mode === 'login' ? (setLoginError(''), setLoginPin(''), setStep('pin')) : sendCode())}
                   disabled={!phoneValid || busy}
-                  className="w-full h-12 rounded-full bg-primary text-primary-foreground font-semibold hover:bg-primary/90 disabled:bg-muted disabled:text-secondary transition-colors flex items-center justify-center gap-2"
+                  className="cp-btn-primary w-full"
                 >
                   {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Continue <ArrowRight className="h-4 w-4" /></>}
                 </button>
@@ -315,7 +315,7 @@ export default function OnboardingPage() {
                   type="button"
                   onClick={() => login(loginPin)}
                   disabled={loginPin.length < 4 || busy}
-                  className="w-full h-12 rounded-full bg-primary text-primary-foreground font-semibold hover:bg-primary/90 disabled:bg-muted disabled:text-secondary transition-colors flex items-center justify-center"
+                  className="cp-btn-primary w-full"
                 >
                   {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Log in'}
                 </button>
@@ -360,7 +360,7 @@ export default function OnboardingPage() {
                   type="button"
                   onClick={verify}
                   disabled={otp.length < 6 || busy}
-                  className="w-full h-12 rounded-full bg-primary text-primary-foreground font-semibold hover:bg-primary/90 disabled:bg-muted disabled:text-secondary transition-colors flex items-center justify-center"
+                  className="cp-btn-primary w-full"
                 >
                   {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Verify & continue'}
                 </button>

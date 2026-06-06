@@ -126,7 +126,7 @@ export default function PoolsPage() {
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">My Pools</h1>
+            <h1 className="text-2xl font-bold text-foreground">My Pools</h1>
             <p className="text-secondary mt-1">Manage your Susu groups and save together</p>
           </div>
           <Link href="/create" className="rounded-full bg-primary hover:bg-primary/90 text-primary-foreground flex items-center gap-2 px-5 py-2.5 text-sm font-medium transition-colors">

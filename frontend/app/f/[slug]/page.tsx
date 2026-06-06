@@ -70,10 +70,10 @@ export default function PublicFundraiserPage() {
               <BadgeCheck className="h-3.5 w-3.5" /> {badge.label}
             </span>
           </div>
-          <h1 className="text-3xl font-bold text-foreground">{f.name}</h1>
+          <h1 className="text-2xl font-bold text-foreground">{f.name}</h1>
           {f.hospital && <p className="text-secondary">{f.hospital}</p>}
 
-          <div className="cp-card p-6 space-y-4 text-left">
+          <div className="cp-card p-5 space-y-4 text-left">
             <div className="flex items-end justify-between">
               <p className="text-2xl font-bold text-foreground">
                 {formatGhs(f.raised)}
@@ -87,7 +87,7 @@ export default function PublicFundraiserPage() {
             <p className="text-sm text-secondary">{f.contributors.length} contributor{f.contributors.length === 1 ? '' : 's'}</p>
 
             {!donateOpen ? (
-              <button onClick={() => setDonateOpen(true)} className="block w-full h-12 rounded-full bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-colors flex items-center justify-center gap-2">
+              <button onClick={() => setDonateOpen(true)} className="cp-btn-primary w-full">
                 <Heart className="h-4 w-4" /> Donate
               </button>
             ) : (
@@ -245,7 +245,7 @@ function DonatePanel({ slug, onClose, onSettled }: { slug: string; onClose: () =
       </div>
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-foreground">Your MoMo number</label>
-        <div className="flex items-center h-12 rounded-xl border border-border bg-card px-3 focus-within:border-primary">
+        <div className="flex items-center h-11 rounded-lg border border-border bg-card px-3 focus-within:border-primary">
           <span className="text-sm font-medium text-foreground border-r border-border pr-2 mr-2 whitespace-nowrap">🇬🇭 +233</span>
           <input inputMode="numeric" value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 9))} placeholder="XX XXX XXXX" className="flex-1 min-w-0 bg-transparent text-base text-foreground placeholder:text-secondary focus:outline-none" />
         </div>

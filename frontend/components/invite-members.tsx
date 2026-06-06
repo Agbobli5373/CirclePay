@@ -87,7 +87,7 @@ export function InviteMembers({ fundId, fundName, remaining }: { fundId: string;
       {/* Add by number */}
       <div className="space-y-3">
         <div className="flex gap-2">
-          <div className="flex items-center h-11 rounded-xl border-2 border-border bg-card px-3 flex-1 min-w-0 focus-within:border-primary">
+          <div className="flex items-center h-11 rounded-lg border border-border bg-card px-3 flex-1 min-w-0 focus-within:border-primary">
             <span className="text-sm font-medium text-foreground border-r border-border pr-2 mr-2 whitespace-nowrap">🇬🇭 +233</span>
             <input
               inputMode="numeric"
@@ -98,7 +98,7 @@ export function InviteMembers({ fundId, fundName, remaining }: { fundId: string;
               className="flex-1 min-w-0 bg-transparent text-base text-foreground placeholder:text-secondary focus:outline-none"
             />
           </div>
-          <button onClick={add} disabled={phone.length < 9 || list.length >= remaining} className="h-11 px-4 rounded-xl bg-primary text-primary-foreground font-semibold disabled:bg-muted disabled:text-secondary transition-colors flex items-center gap-1 flex-shrink-0">
+          <button onClick={add} disabled={phone.length < 9 || list.length >= remaining} className="h-11 px-4 rounded-lg bg-primary text-primary-foreground font-semibold disabled:bg-muted disabled:text-secondary transition-colors flex items-center gap-1 flex-shrink-0">
             <Plus className="h-4 w-4" /> Add
           </button>
         </div>

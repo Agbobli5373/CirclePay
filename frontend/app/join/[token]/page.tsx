@@ -45,7 +45,7 @@ export default function JoinPage() {
         </div>
       </div>
       <div className="flex-1 flex items-center justify-center px-4">
-        <div className="w-full max-w-md cp-card p-8 text-center space-y-4">
+        <div className="w-full max-w-md cp-card p-6 text-center space-y-4">
           {!errored ? (
             <>
               <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />

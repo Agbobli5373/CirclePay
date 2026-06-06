@@ -154,7 +154,7 @@ export default function CreateFundPage() {
     return (
       <AppShell currentPage="funds" title="Create a fund">
         <div className="max-w-md mx-auto pb-6">
-          <div className="cp-card p-6 sm:p-8 space-y-6">
+          <div className="cp-card p-5 sm:p-6 space-y-6">
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowInvite(false)}
@@ -200,7 +200,7 @@ export default function CreateFundPage() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-foreground">Add by MoMo number</label>
                   <div className="flex gap-2">
-                    <div className="flex items-center h-12 rounded-xl border-2 border-border bg-card px-3 flex-1 min-w-0 focus-within:border-primary">
+                    <div className="flex items-center h-11 rounded-lg border border-border bg-card px-3 flex-1 min-w-0 focus-within:border-primary">
                       <span className="text-sm font-medium text-foreground border-r border-border pr-2 mr-2 whitespace-nowrap">
                         🇬🇭 +233
                       </span>
@@ -221,7 +221,7 @@ export default function CreateFundPage() {
                     <button
                       onClick={addInvite}
                       disabled={invitePhone.length < 9}
-                      className="h-12 px-4 rounded-xl bg-primary text-primary-foreground font-semibold disabled:bg-muted disabled:text-secondary transition-colors flex items-center gap-1 flex-shrink-0"
+                      className="h-11 px-4 rounded-lg bg-primary text-primary-foreground font-semibold disabled:bg-muted disabled:text-secondary transition-colors flex items-center gap-1 flex-shrink-0"
                     >
                       <Plus className="h-4 w-4" />
                       Add
@@ -302,7 +302,7 @@ export default function CreateFundPage() {
     return (
       <AppShell currentPage="funds" title="Create a fund">
         <div className="max-w-md mx-auto pb-6">
-          <div className="cp-card p-6 sm:p-8 text-center space-y-6">
+          <div className="cp-card p-5 sm:p-6 text-center space-y-6">
             <div className="mx-auto h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
               <CheckCircle2 className="h-9 w-9 text-primary" />
             </div>
@@ -590,7 +590,7 @@ export default function CreateFundPage() {
                 </Field>
               ) : (
                 <Field label="Hospital MoMo number">
-                  <div className="flex items-center h-12 rounded-xl border border-border bg-card px-3 focus-within:border-primary">
+                  <div className="flex items-center h-11 rounded-lg border border-border bg-card px-3 focus-within:border-primary">
                     <span className="text-sm font-medium text-foreground border-r border-border pr-2 mr-2 whitespace-nowrap">🇬🇭 +233</span>
                     <input
                       inputMode="numeric"

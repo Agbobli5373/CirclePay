@@ -89,7 +89,7 @@ export default function ProfilePage() {
         )}
 
         {/* Identity */}
-        <div className="cp-card p-6 flex items-center gap-4">
+        <div className="cp-card p-5 flex items-center gap-4">
           <div className="h-16 w-16 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xl font-semibold flex-shrink-0">
             {initialsOf(me.name, me.phone)}
           </div>
@@ -130,7 +130,7 @@ export default function ProfilePage() {
         </div>
 
         {/* Trust Score */}
-        <div className="cp-card p-6 space-y-4">
+        <div className="cp-card p-5 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-5 w-5 text-primary" />
@@ -205,7 +205,7 @@ export default function ProfilePage() {
         <button
           onClick={signOut}
           disabled={logout.isPending}
-          className="w-full h-12 rounded-full border border-border bg-card text-foreground font-medium hover:bg-muted transition-colors flex items-center justify-center"
+          className="cp-btn-ghost w-full"
         >
           {logout.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sign out'}
         </button>

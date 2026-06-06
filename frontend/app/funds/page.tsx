@@ -69,7 +69,7 @@ export default function FundsPage() {
         {/* Title bar: title | search (constrained) | action — one row on desktop, stacked on mobile */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex-1 min-w-0">
-            <h1 className="text-3xl font-bold text-foreground">Funds</h1>
+            <h1 className="text-2xl font-bold text-foreground">Funds</h1>
             <p className="text-secondary mt-1">Your savings circles &amp; fundraisers</p>
           </div>
           <div className="relative w-full sm:w-64 shrink-0">

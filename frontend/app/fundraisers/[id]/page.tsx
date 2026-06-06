@@ -85,7 +85,7 @@ export default function FundraiserDetailPage() {
           Funds
         </Link>
 
-        <div className="cp-card p-6 space-y-5">
+        <div className="cp-card p-5 space-y-5">
           <div>
             <div className="flex flex-wrap items-center gap-2 mb-2">
               <span className="text-xs font-medium bg-destructive/10 text-destructive rounded-full px-2.5 py-1">Medical</span>
@@ -139,20 +139,20 @@ export default function FundraiserDetailPage() {
               <p className="text-xs text-secondary">Confirm the payee ({f.payeeName ?? '—'}, {f.payoutRoute === 'hospital_bank' ? 'bank' : 'MoMo'}) before any payout.</p>
               <div className="flex gap-2">
                 <button onClick={() => onVerify('verified')} disabled={busy} className="cp-btn-primary flex-1 h-10">Verify payee</button>
-                <button onClick={() => onVerify('rejected')} disabled={busy} className="inline-flex items-center justify-center rounded-full border-2 border-border px-4 h-10 text-sm font-semibold text-secondary hover:text-destructive hover:border-destructive/40 transition-colors">Reject</button>
+                <button onClick={() => onVerify('rejected')} disabled={busy} className="inline-flex items-center justify-center rounded-full border border-border px-4 h-10 text-sm font-semibold text-secondary hover:text-destructive hover:border-destructive/40 transition-colors">Reject</button>
               </div>
             </div>
           )}
         </div>
 
         {f.story && (
-          <div className="cp-card p-6 space-y-2">
+          <div className="cp-card p-5 space-y-2">
             <h2 className="text-base font-semibold text-foreground">The story</h2>
             <p className="text-sm text-foreground leading-relaxed whitespace-pre-line">{f.story}</p>
           </div>
         )}
 
-        <div className="cp-card p-6 space-y-3">
+        <div className="cp-card p-5 space-y-3">
           <h2 className="text-base font-semibold text-foreground">Contributors</h2>
           {f.contributors.length === 0 ? (
             <p className="text-sm text-secondary">No donations yet — share the link to get going.</p>

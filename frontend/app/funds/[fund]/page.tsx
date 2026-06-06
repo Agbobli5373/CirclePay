@@ -81,9 +81,9 @@ export default function SusuFundPage() {
         {!fund.started ? (
           /* ───────── AWAITING MEMBERS ───────── */
           <>
-            <div className="cp-card p-6 space-y-6">
+            <div className="cp-card p-5 space-y-6">
               <div>
-                <h1 className="text-3xl font-bold text-foreground mb-2">{fund.name}</h1>
+                <h1 className="text-2xl font-bold text-foreground mb-2">{fund.name}</h1>
                 <div className="flex items-center gap-2">
                   <span className="inline-block text-sm font-medium bg-primary/10 text-primary rounded-full px-3 py-1">{fund.type}</span>
                   <span className="cp-pill">Waiting for members</span>
@@ -124,7 +124,7 @@ export default function SusuFundPage() {
 
             {/* Invite & manage (admin) */}
             {isAdmin && (
-              <div className="cp-card p-6 space-y-4">
+              <div className="cp-card p-5 space-y-4">
                 <div className="flex items-center gap-2">
                   <UserPlus className="h-5 w-5 text-primary" />
                   <h2 className="text-lg font-semibold text-foreground">Invite & manage</h2>
@@ -134,7 +134,7 @@ export default function SusuFundPage() {
             )}
 
             {/* Members + open seats */}
-            <div className="cp-card p-6 space-y-4">
+            <div className="cp-card p-5 space-y-4">
               <h2 className="text-lg font-semibold text-foreground">Members ({joined} of {fund.memberCount})</h2>
               <div className="grid gap-2">
                 {fund.members.map((m) => (
@@ -165,9 +165,9 @@ export default function SusuFundPage() {
         ) : (
           /* ───────── RUNNING ───────── */
           <>
-            <div className="cp-card p-6 space-y-6">
+            <div className="cp-card p-5 space-y-6">
               <div>
-                <h1 className="text-3xl font-bold text-foreground mb-2">{fund.name}</h1>
+                <h1 className="text-2xl font-bold text-foreground mb-2">{fund.name}</h1>
                 <div className="flex items-center gap-2">
                   <span className="inline-block text-sm font-medium bg-primary/10 text-primary rounded-full px-3 py-1">{fund.type}</span>
                   <span className="text-sm text-secondary">{fund.memberCount} members</span>
@@ -203,15 +203,15 @@ export default function SusuFundPage() {
 
                 <div className="space-y-2">
                   {canPay ? (
-                    <Link href={`/pay?fund=${fund.id}`} className="block w-48 py-3 bg-primary text-primary-foreground rounded-full font-medium hover:bg-primary/90 transition-colors text-center">
+                    <Link href={`/pay?fund=${fund.id}`} className="cp-btn-primary w-48">
                       Pay this cycle
                     </Link>
                   ) : iPaid ? (
-                    <div className="w-48 py-3 bg-primary/10 text-primary rounded-full font-medium text-center flex items-center justify-center gap-2">
+                    <div className="w-48 h-11 bg-primary/10 text-primary rounded-full font-medium text-center flex items-center justify-center gap-2">
                       <CheckCircle2 className="h-5 w-5" /> Paid {formatGhs(fund.contribution)}
                     </div>
                   ) : (
-                    <div className="w-48 py-3 bg-muted text-secondary rounded-full font-medium text-center text-sm">Not your turn to pay</div>
+                    <div className="w-48 h-11 bg-muted text-secondary rounded-full font-medium text-center text-sm flex items-center justify-center">Not your turn to pay</div>
                   )}
                   <p className="text-xs text-secondary text-center">Pot {formatGhs(fund.potPesewas)} each cycle</p>
                 </div>
@@ -219,7 +219,7 @@ export default function SusuFundPage() {
             </div>
 
             {/* This cycle */}
-            <div className="cp-card p-6 space-y-4">
+            <div className="cp-card p-5 space-y-4">
               <h2 className="text-lg font-semibold text-foreground">This cycle ({fund.currentCycle} of {fund.totalCycles})</h2>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -257,7 +257,7 @@ export default function SusuFundPage() {
             </div>
 
             {/* Payout order */}
-            <div className="cp-card p-6 space-y-4">
+            <div className="cp-card p-5 space-y-4">
               <h2 className="text-lg font-semibold text-foreground">Payout order</h2>
               <div className="space-y-3">
                 {fund.payoutOrder.map((userId, i) => {

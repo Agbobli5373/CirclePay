@@ -17,7 +17,7 @@ if anything below looks stale.
 | `muted` | `#E7E3DC` | quiet fills, progress track, avatar bg |
 | `border` | `#E7E3DC` | hairlines (same as muted — borders are deliberately soft) |
 | `destructive` | `#DC2626` | errors, danger, the "Medical" tag |
-| `--radius` | `1rem` (16px) | base radius; cards use `rounded-3xl`, controls `rounded-xl`/`rounded-full` |
+| `--radius` | `1rem` (16px) | base radius; cards use `rounded-2xl`, inputs `rounded-lg`, buttons/chips `rounded-full` |
 
 Font: **Inter** (`--font-sans`). Use `tabular-nums` for money. Tailwind classes map to these tokens
 (`text-foreground`, `text-secondary`, `bg-card`, `bg-muted`, `border-border`, `bg-primary`, `text-primary`,
@@ -25,12 +25,12 @@ Font: **Inter** (`--font-sans`). Use `tabular-nums` for money. Tailwind classes 
 
 ## Component classes (in `globals.css @layer components`) — reuse before inventing
 
-- `cp-card` — `rounded-3xl border border-border bg-card` (**flat, no shadow** — the signature look).
+- `cp-card` — `rounded-2xl border border-border bg-card` (**flat, no shadow** — the signature look).
 - `cp-card-interactive` — adds `hover:border-primary/50` for clickable cards.
-- `cp-btn-primary` — `h-12 px-7 rounded-full bg-primary` solid CTA; `disabled:bg-muted`.
-- `cp-btn-ghost` — `h-12 rounded-full border-2 border-border bg-card` secondary action.
+- `cp-btn-primary` — `h-11 px-5 rounded-full bg-primary` solid CTA; `disabled:bg-muted`.
+- `cp-btn-ghost` — `h-11 px-5 rounded-full border border-border bg-card` secondary action (hairline, not `border-2`).
 - `cp-pill` — small `rounded-full bg-muted text-secondary` chip for metadata.
-- `cp-input` / `cp-textarea` — `rounded-xl border-2`, focus `border-primary` + `ring-4 ring-primary/15`.
+- `cp-input` / `cp-textarea` — `h-11 rounded-lg border` (hairline), focus `border-primary` + `ring-2 ring-primary/30`.
 - `cp-gradient` — **flat `var(--primary)` fill** (legacy name; it is NOT a gradient). Used on the hero/
   balance block. Keep it flat — the PRD calls for **no gradients**.
 
@@ -46,8 +46,11 @@ stop — that's drifting off-style.
   for destructive/medical. Amber only for a pending/warning chip. Never add a new brand color.
 - **Cream canvas, white cards.** The cream background + white `cp-card` is the depth model. Don't put
   white on white or box things inside boxes.
-- **Rounded + generous.** `rounded-2xl`/`3xl` cards, `rounded-full` controls/chips, roomy padding
-  (`p-5`/`p-6`), section rhythm `space-y-6`/`8`.
+- **Rounded + tight.** `rounded-2xl` cards, `rounded-lg` inputs, `rounded-full` buttons/chips;
+  **hairline borders** (`border`, not `border-2`). Compact padding — `p-5` (cards), `p-5 sm:p-6`
+  (large/desktop cards); section rhythm `space-y-6`. Refined, not airy.
+- **Buttons & inputs are `h-11` (44px)** — the deliberate floor: still a comfortable tap target on
+  mobile, but tighter than the old `h-12`. Don't go below `h-11` for anything interactive.
 - **Money is the hero.** Format with `formatGhs` (from `@circlepay/shared`), big + bold + `tabular-nums`;
   pair with a small muted label. This is a finance app — the numbers should feel trustworthy and precise.
 - **Trust cues stay quiet.** "Powered by Moolre", verification badges, etc. are small and calm —

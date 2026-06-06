@@ -94,7 +94,7 @@ function PayInner() {
   return (
     <div className="w-full max-w-md">
       {step === 'success' ? (
-        <div className="cp-card p-6 sm:p-8 space-y-6">
+        <div className="cp-card p-5 sm:p-6 space-y-6">
           <div className="text-center space-y-3">
             <div className="mx-auto h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
               <CheckCircle2 className="h-9 w-9 text-primary" />
@@ -115,7 +115,7 @@ function PayInner() {
           <Link href={`/funds/${fundId}`} className="cp-btn-primary w-full">Done</Link>
         </div>
       ) : step === 'error' ? (
-        <div className="cp-card p-6 sm:p-8 space-y-6 text-center">
+        <div className="cp-card p-5 sm:p-6 space-y-6 text-center">
           <div className="mx-auto h-16 w-16 rounded-full bg-destructive/10 flex items-center justify-center">
             <AlertCircle className="h-9 w-9 text-destructive" />
           </div>
@@ -129,7 +129,7 @@ function PayInner() {
           </div>
         </div>
       ) : step === 'processing' ? (
-        <div className="cp-card p-8 space-y-4 text-center">
+        <div className="cp-card p-6 space-y-4 text-center">
           <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
           <div>
             <h1 className="text-xl font-semibold text-foreground">Confirming your payment…</h1>
@@ -137,7 +137,7 @@ function PayInner() {
           </div>
         </div>
       ) : step === 'otp' ? (
-        <div className="cp-card p-6 sm:p-8 space-y-6">
+        <div className="cp-card p-5 sm:p-6 space-y-6">
           <div className="text-center space-y-2">
             <div className="mx-auto h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center">
               <ShieldCheck className="h-7 w-7 text-primary" />
@@ -163,7 +163,7 @@ function PayInner() {
                 <span className="text-sm font-bold text-primary">GHS</span>
               </div>
               <div>
-                <p className="text-4xl font-bold text-foreground">{formatGhs(amount, { withSymbol: false })}</p>
+                <p className="text-3xl font-bold text-foreground">{formatGhs(amount, { withSymbol: false })}</p>
                 <p className="text-sm text-secondary mt-1">Susu contribution · Cycle {fund.currentCycle} of {fund.totalCycles}</p>
               </div>
             </div>
@@ -200,10 +200,10 @@ function PayInner() {
             </div>
 
             <div className="flex gap-3">
-              <Link href={`/funds/${fundId}`} className="flex-1 h-12 rounded-full border border-border text-foreground font-medium hover:bg-muted transition-colors flex items-center justify-center">
+              <Link href={`/funds/${fundId}`} className="cp-btn-ghost flex-1">
                 Cancel
               </Link>
-              <button onClick={() => submit()} disabled={busy} className="flex-1 h-12 rounded-full bg-primary text-primary-foreground font-semibold hover:bg-primary/90 disabled:opacity-70 transition-colors flex items-center justify-center">
+              <button onClick={() => submit()} disabled={busy} className="cp-btn-primary flex-1 disabled:opacity-70">
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : `Confirm ${formatGhs(total)}`}
               </button>
             </div>
