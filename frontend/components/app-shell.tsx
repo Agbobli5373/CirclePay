@@ -45,7 +45,7 @@ export function AppShell({ children, currentPage = 'home' }: AppShellProps) {
 
   // Client-side auth gate (session cookie lives on the API origin, so middleware can't see it).
   useEffect(() => {
-    if (isError) router.replace('/onboarding')
+    if (isError) router.replace('/onboarding?mode=login')
   }, [isError, router])
 
   if (isLoading || !me) {
@@ -62,7 +62,7 @@ export function AppShell({ children, currentPage = 'home' }: AppShellProps) {
 
   async function handleLogout() {
     await logout.mutateAsync().catch(() => undefined)
-    router.replace('/onboarding')
+    router.replace('/onboarding?mode=login')
   }
 
   return (

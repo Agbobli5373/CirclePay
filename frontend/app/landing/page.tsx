@@ -16,10 +16,10 @@ export default function LandingPage() {
               Why CirclePay
             </a>
             <div className="flex items-center gap-2">
-              <a href="/onboarding" className="px-4 py-2 text-sm font-medium text-foreground hover:bg-muted rounded-lg transition-colors">
+              <a href="/onboarding?mode=login" className="px-4 py-2 text-sm font-medium text-foreground hover:bg-muted rounded-lg transition-colors">
                 Sign in
               </a>
-              <a href="/onboarding" className="px-4 py-2 bg-primary text-primary-foreground rounded-full text-sm font-medium hover:bg-primary/90 transition-colors">
+              <a href="/onboarding?mode=register" className="px-4 py-2 bg-primary text-primary-foreground rounded-full text-sm font-medium hover:bg-primary/90 transition-colors">
                 Get started
               </a>
             </div>
@@ -49,8 +49,8 @@ export default function LandingPage() {
               </div>
 
               <div className="flex flex-col sm:flex-row gap-4 pt-4">
-                <a 
-                  href="/onboarding"
+                <a
+                  href="/onboarding?mode=register"
                   className="px-8 py-3.5 bg-primary text-primary-foreground rounded-full font-semibold hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 text-center"
                 >
                   Join Now
@@ -313,8 +313,8 @@ export default function LandingPage() {
             <p className="text-lg text-primary-foreground/90">Join 50,000+ Ghanaians already using CirclePay</p>
           </div>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <a 
-              href="/onboarding"
+            <a
+              href="/onboarding?mode=register"
               className="px-8 py-3.5 bg-primary-foreground text-primary rounded-full font-semibold hover:bg-primary-foreground/90 transition-colors flex items-center justify-center gap-2"
             >
               Get Started Now

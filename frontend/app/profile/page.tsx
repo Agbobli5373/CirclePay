@@ -70,7 +70,7 @@ export default function ProfilePage() {
 
   async function signOut() {
     await logout.mutateAsync().catch(() => undefined)
-    router.replace('/onboarding')
+    router.replace('/onboarding?mode=login')
   }
 
   return (

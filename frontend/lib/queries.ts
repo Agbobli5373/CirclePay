@@ -134,6 +134,14 @@ export function useUpdateProfile() {
   })
 }
 
+export function useLogin() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ phone, pin }: { phone: string; pin: string }) => api.auth.login(phone, pin),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.me }),
+  })
+}
+
 export function useLogout() {
   const qc = useQueryClient()
   return useMutation({
