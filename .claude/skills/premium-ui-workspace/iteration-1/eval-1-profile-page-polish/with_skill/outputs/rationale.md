@@ -1,0 +1,14 @@
+# Profile page — premium polish
+
+## What I changed
+- **Added a page heading + tightened the type scale.** Introduced a single `text-2xl/3xl` page title ("Profile") matching the dashboard's heading treatment, and demoted the in-card name to `text-xl`. Collapsed the two competing `text-lg` section headings: the trust card now leads with a `text-base` title + muted subline, and "Security" became a quiet `text-xs` uppercase eyebrow. Result: one clear top-to-bottom hierarchy instead of three equally-loud cards.
+- **Killed the box-in-box.** The trust explainer was a `bg-muted/50` box nested inside the card; it's now a hairline-separated footnote (`border-t border-border pt-4`). The three trust stats sit in a calm hairline-gridded panel (`gap-px` over `bg-border/70`) rather than floating, and all stat values use `tabular-nums` so digits and percentages align — a finance-app necessity.
+- **Calmed the security rows.** Dropped the filled `bg-primary/10` icon chips (green was over-used as decoration) for quiet monochrome `text-secondary` icons; kept the hairline-divided list, widened the gap to `gap-4`, and gave rows `sm:px-5`. Green is now reserved for the one place it matters — the trust score and standing chip.
+- **Re-ranked the actions.** Sign out was a full-width bordered button reading like a primary CTA; it's now a quiet borderless `text-destructive` action with a soft hover tint, so nothing competes for "the primary thing."
+- **Unified the spacing rhythm.** Page-level `space-y-8`, cards on `p-6`/`sm:p-7`, consistent `space-y-6` inside the trust card, and a narrower `max-w-2xl` reading column (was `max-w-3xl`) so content doesn't sprawl on desktop.
+- **Designed the missing states.** Replaced the bare centered spinner with a full **skeleton** that mirrors the real layout (heading, identity, trust, security) so there's zero layout shift on load. Refined the inline name-editor into a proper 44px control cluster (solid primary save, ghost cancel), gave the toggle a visible `focus-visible` ring, and added an `aria-label` to the trust meter.
+
+## Why it reads as premium now
+- **Clarity:** there's now one focal path — title → who you are → your trust → your settings → a quiet exit — instead of three same-weight cards shouting at once. The hierarchy survives in grayscale because it's carried by size, weight, and space, not color.
+- **Deference + restraint:** chrome recedes. Removing the nested muted box, the filled icon chips, and the loud sign-out button (subtraction, not decoration) lets the user's name and trust standing be the content, with green spent on a single accent.
+- **Finish:** the layout-matching skeleton, the tightened edit affordance, and tabular numbers are the unglamorous details that move it from "demo screen" to "product" — all within the existing `cp-*` classes and semantic tokens, with no new colors, gradients, or shadows.
