@@ -368,7 +368,7 @@ export default function CreateFundPage() {
   // ---------- FORM ----------
   return (
     <AppShell currentPage="funds" title="Create a fund">
-      <div className="max-w-xl mx-auto space-y-6 pb-6">
+      <div className="max-w-xl lg:max-w-5xl mx-auto space-y-6 pb-6">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold text-foreground">Let&apos;s set up your fund</h1>
           <p className="text-sm text-secondary">
@@ -380,6 +380,8 @@ export default function CreateFundPage() {
           </p>
         </div>
 
+        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-8 lg:items-start">
+        <div className="space-y-6">
         <div className="cp-card p-5 sm:p-6 space-y-6">
           {/* Type toggle */}
           <div className="space-y-2">
@@ -430,44 +432,48 @@ export default function CreateFundPage() {
 
           {isSusu ? (
             <>
-              <Field label="Contribution amount (GHS)">
-                <input
-                  inputMode="numeric"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))}
-                  placeholder="500"
-                  className="cp-input"
-                />
-              </Field>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Contribution amount (GHS)">
+                  <input
+                    inputMode="numeric"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))}
+                    placeholder="500"
+                    className="cp-input"
+                  />
+                </Field>
 
-              <Field label="How often?">
-                <div className="grid grid-cols-2 gap-2">
-                  {(['Weekly', 'Monthly'] as Frequency[]).map((f) => (
-                    <Pill key={f} active={frequency === f} onClick={() => setFrequency(f)}>
-                      {f}
-                    </Pill>
-                  ))}
-                </div>
-              </Field>
+                <Field label="How many members?">
+                  <input
+                    inputMode="numeric"
+                    value={members}
+                    onChange={(e) => setMembers(e.target.value.replace(/\D/g, ''))}
+                    placeholder="10"
+                    className="cp-input"
+                  />
+                </Field>
+              </div>
 
-              <Field label="How many members?">
-                <input
-                  inputMode="numeric"
-                  value={members}
-                  onChange={(e) => setMembers(e.target.value.replace(/\D/g, ''))}
-                  placeholder="10"
-                  className="cp-input"
-                />
-              </Field>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="How often?">
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['Weekly', 'Monthly'] as Frequency[]).map((f) => (
+                      <Pill key={f} active={frequency === f} onClick={() => setFrequency(f)}>
+                        {f}
+                      </Pill>
+                    ))}
+                  </div>
+                </Field>
 
-              <Field label="When does it start?">
-                <input
-                  type="month"
-                  value={startMonth}
-                  onChange={(e) => setStartMonth(e.target.value)}
-                  className="cp-input"
-                />
-              </Field>
+                <Field label="When does it start?">
+                  <input
+                    type="month"
+                    value={startMonth}
+                    onChange={(e) => setStartMonth(e.target.value)}
+                    className="cp-input"
+                  />
+                </Field>
+              </div>
 
               <Field label="Payout rule">
                 <div className="grid grid-cols-2 gap-2">
@@ -481,7 +487,7 @@ export default function CreateFundPage() {
 
               {/* Live summary */}
               {cyclePot > 0 && (
-                <div className="rounded-xl bg-primary/5 p-4 text-sm text-foreground leading-relaxed">
+                <div className="rounded-xl bg-primary/5 p-4 text-sm text-foreground leading-relaxed lg:hidden">
                   Each cycle, one member receives{' '}
                   <span className="font-semibold text-primary">GHS {cyclePot.toLocaleString()}</span>.{' '}
                   {membersNum} members × GHS {amountNum.toLocaleString()}/{everyLabel} · the circle runs about{' '}
@@ -491,15 +497,26 @@ export default function CreateFundPage() {
             </>
           ) : (
             <>
-              <Field label="Fundraising goal (GHS)">
-                <input
-                  inputMode="numeric"
-                  value={goal}
-                  onChange={(e) => setGoal(e.target.value.replace(/\D/g, ''))}
-                  placeholder="5000"
-                  className="cp-input"
-                />
-              </Field>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Fundraising goal (GHS)">
+                  <input
+                    inputMode="numeric"
+                    value={goal}
+                    onChange={(e) => setGoal(e.target.value.replace(/\D/g, ''))}
+                    placeholder="5000"
+                    className="cp-input"
+                  />
+                </Field>
+
+                <Field label="By when? (optional)">
+                  <input
+                    type="date"
+                    value={deadline}
+                    onChange={(e) => setDeadline(e.target.value)}
+                    className="cp-input"
+                  />
+                </Field>
+              </div>
 
               <Field label="Who is it for?">
                 <input
@@ -532,15 +549,6 @@ export default function CreateFundPage() {
                 />
               </Field>
 
-              <Field label="By when? (optional)">
-                <input
-                  type="date"
-                  value={deadline}
-                  onChange={(e) => setDeadline(e.target.value)}
-                  className="cp-input"
-                />
-              </Field>
-
               {/* Shareable toggle */}
               <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
                 <div className="min-w-0">
@@ -562,6 +570,7 @@ export default function CreateFundPage() {
                 </p>
               </Field>
 
+              <div className="grid gap-4 sm:grid-cols-2 sm:items-start">
               <Field label="Payee name">
                 <input
                   value={payeeName}
@@ -599,10 +608,11 @@ export default function CreateFundPage() {
                   </div>
                 </Field>
               )}
+              </div>
 
               {/* Live summary */}
               {goalNum > 0 && beneficiary && (
-                <div className="rounded-xl bg-primary/5 p-4 text-sm text-foreground leading-relaxed">
+                <div className="rounded-xl bg-primary/5 p-4 text-sm text-foreground leading-relaxed lg:hidden">
                   Raising <span className="font-semibold text-primary">GHS {goalNum.toLocaleString()}</span> for{' '}
                   {beneficiary}
                   {hospital ? ` at ${hospital}` : ''}. Funds go straight to the hospital — CirclePay never holds the money.
@@ -632,6 +642,56 @@ export default function CreateFundPage() {
             )}
           </button>
         </div>
+        </div>{/* /left column */}
+
+        {/* Live preview — desktop only; fills the space and mirrors what they're building */}
+        <aside className="hidden lg:block lg:sticky lg:top-24">
+          <p className="text-xs font-semibold text-secondary uppercase tracking-wide mb-3">Preview</p>
+          {isSusu ? (
+            <div className="cp-card p-5 space-y-4">
+              <span className="inline-flex items-center rounded-full text-xs font-semibold px-2.5 py-1 bg-primary/15 text-primary">Susu</span>
+              <p className="text-base font-bold text-foreground">{name.trim() || 'Your circle'}</p>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-4">
+                <PreviewStat label="Per cycle" value={amountNum > 0 ? `GHS ${amountNum.toLocaleString()}/${everyLabel}` : '—'} />
+                <PreviewStat label="Members" value={membersNum > 0 ? String(membersNum) : '—'} />
+                <PreviewStat label="Pot each cycle" value={cyclePot > 0 ? `GHS ${cyclePot.toLocaleString()}` : '—'} accent />
+                <PreviewStat label="Payout" value={payout} />
+              </div>
+              <p className="text-xs text-secondary leading-relaxed border-t border-border/60 pt-3">
+                Invite members after you create — the circle starts automatically once it fills.
+              </p>
+            </div>
+          ) : (
+            <div className="cp-card p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center rounded-full text-xs font-semibold px-2.5 py-1 bg-destructive/10 text-destructive">Medical</span>
+                <span className="inline-flex items-center rounded-full text-xs font-medium px-2.5 py-1 bg-muted text-secondary">Pending verification</span>
+              </div>
+              <div>
+                <p className="text-base font-bold text-foreground">{name.trim() || 'Your fundraiser'}</p>
+                <p className="text-xs text-secondary mt-0.5">
+                  {beneficiary.trim() ? `For ${beneficiary.trim()}` : 'Who is it for?'}
+                  {hospital.trim() ? ` · ${hospital.trim()}` : ''}
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-medium text-secondary">Raised</span>
+                  <span className="font-semibold text-primary">0%</span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2">
+                  <div className="bg-primary h-2 rounded-full" style={{ width: '0%' }} />
+                </div>
+                <p className="text-xs text-secondary tabular-nums">GHS 0 of GHS {goalNum > 0 ? goalNum.toLocaleString() : '—'}</p>
+              </div>
+              <p className="text-xs text-secondary leading-relaxed border-t border-border/60 pt-3 flex items-start gap-1.5">
+                <BadgeCheck className="h-3.5 w-3.5 text-primary flex-shrink-0 mt-0.5" />
+                Funds go straight to the verified payee. CirclePay never holds the money. Powered by Moolre.
+              </p>
+            </div>
+          )}
+        </aside>
+        </div>{/* /grid */}
       </div>
     </AppShell>
   )
@@ -642,6 +702,15 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div className="space-y-2">
       <label className="text-sm font-medium text-foreground">{label}</label>
       {children}
+    </div>
+  )
+}
+
+function PreviewStat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-xs text-secondary">{label}</p>
+      <p className={`text-sm font-semibold tabular-nums truncate ${accent ? 'text-primary' : 'text-foreground'}`}>{value}</p>
     </div>
   )
 }
