@@ -11,7 +11,7 @@ import {
 } from '@nestjs/swagger'
 import type { Request, Response } from 'express'
 import { AuthService } from './auth.service'
-import { RequestOtpDto, VerifyOtpDto, SetPinDto, LoginDto, UpdateProfileDto } from './dto/auth.dto'
+import { RequestOtpDto, VerifyOtpDto, SetPinDto, LoginDto, UpdateProfileDto, ChangePinDto } from './dto/auth.dto'
 import { OkResponseDto, VerifyOtpResponseDto, MeResponseDto } from './dto/auth-responses.dto'
 import { JwtAuthGuard } from '../common/auth/jwt-auth.guard'
 import { CurrentUser } from '../common/auth/current-user.decorator'
@@ -105,5 +105,17 @@ export class AuthController {
   @ApiUnauthorizedResponse({ description: 'No/invalid session' })
   updateMe(@CurrentUser() user: AuthUser, @Body() dto: UpdateProfileDto) {
     return this.auth.updateProfile(user, dto)
+  }
+
+  @Patch('pin')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  @ApiCookieAuth('access_token')
+  @ApiOperation({ summary: 'Change the current user PIN (verify current, set new)' })
+  @ApiOkResponse({ type: OkResponseDto })
+  @ApiUnauthorizedResponse({ description: 'PIN_INVALID — wrong current PIN' })
+  @ApiBadRequestResponse({ description: 'PIN validation failed (trivial/unchanged/mismatch)' })
+  changePin(@CurrentUser() user: AuthUser, @Body() dto: ChangePinDto) {
+    return this.auth.changePin(user, dto)
   }
 }

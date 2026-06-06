@@ -14,7 +14,7 @@ import { RedisService } from '../redis/redis.service'
 import { NotificationsService } from '../notifications/notifications.service'
 import { OtpService } from './otp.service'
 import { TokenService } from './token.service'
-import type { RequestOtpDto, VerifyOtpDto, SetPinDto, LoginDto } from './dto/auth.dto'
+import type { RequestOtpDto, VerifyOtpDto, SetPinDto, LoginDto, ChangePinDto } from './dto/auth.dto'
 import type { AuthUser } from '../common/auth/auth-user'
 
 @Injectable()
@@ -145,6 +145,41 @@ export class AuthService {
 
   async logout(refreshToken: string | undefined, res: Response): Promise<{ ok: true }> {
     await this.tokens.clearSession(res, refreshToken)
+    return { ok: true }
+  }
+
+  /**
+   * Change PIN while signed in: verify the current PIN, then set a new one.
+   * Reuses the login lockout (`pin:fail` / `pin:lock`) so the current-PIN check
+   * can't be brute-forced from an authenticated session.
+   */
+  async changePin(authUser: AuthUser, dto: ChangePinDto): Promise<{ ok: true }> {
+    const user = await this.db.user.findUnique({ where: { id: authUser.id } })
+    if (!user || !user.pinHash) {
+      throw new UnauthorizedException({ code: 'AUTH_INVALID', message: 'Session invalid' })
+    }
+
+    const lockKey = `pin:lock:${user.id}`
+    if (await this.redis.exists(lockKey)) {
+      throw new HttpException({ code: 'LOCKED', message: 'Too many attempts, try later' }, HttpStatus.LOCKED)
+    }
+
+    const valid = await argon2.verify(user.pinHash, dto.currentPin)
+    if (!valid) {
+      const max = Number(this.config.get<string>('PIN_MAX_ATTEMPTS') ?? 5)
+      const lockSecs = Number(this.config.get<string>('PIN_LOCK_SECONDS') ?? 900)
+      const fails = await this.redis.incrWithTtl(`pin:fail:${user.id}`, lockSecs)
+      if (fails >= max) {
+        await this.redis.setEx(lockKey, '1', lockSecs)
+        await this.redis.del(`pin:fail:${user.id}`)
+        throw new HttpException({ code: 'LOCKED', message: 'Too many attempts, try later' }, HttpStatus.LOCKED)
+      }
+      throw new UnauthorizedException({ code: 'PIN_INVALID', message: 'Current PIN is incorrect' })
+    }
+
+    const pinHash = await argon2.hash(dto.newPin, { type: argon2.argon2id })
+    await this.db.user.update({ where: { id: user.id }, data: { pinHash } })
+    await this.redis.del(`pin:fail:${user.id}`)
     return { ok: true }
   }
 

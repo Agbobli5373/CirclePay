@@ -58,8 +58,22 @@ export const updateProfileSchema = z.object({
   name: z.string().trim().min(1, 'Enter your name').max(80),
 })
 
+/** Change PIN while authenticated: verify the current PIN, then set a fresh one. */
+export const changePinSchema = z
+  .object({
+    currentPin: z.string().regex(/^\d{4}$/, 'PIN must be 4 digits'),
+    newPin: pinSchema,
+    confirmPin: z.string(),
+  })
+  .refine((d) => d.newPin === d.confirmPin, { message: 'PINs do not match', path: ['confirmPin'] })
+  .refine((d) => d.newPin !== d.currentPin, {
+    message: 'New PIN must be different from your current one',
+    path: ['newPin'],
+  })
+
 export type RequestOtpInput = z.infer<typeof requestOtpSchema>
 export type VerifyOtpInput = z.infer<typeof verifyOtpSchema>
 export type SetPinInput = z.infer<typeof setPinSchema>
 export type LoginInput = z.infer<typeof loginSchema>
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>
+export type ChangePinInput = z.infer<typeof changePinSchema>

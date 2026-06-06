@@ -269,6 +269,8 @@ export const api = {
     logout: () => request<{ ok: true }>('/auth/logout', { method: 'POST' }),
     me: () => request<Me>('/auth/me'),
     updateMe: (name: string) => request<Me>('/auth/me', { method: 'PATCH', body: { name } }),
+    changePin: (currentPin: string, newPin: string, confirmPin: string) =>
+      request<{ ok: true }>('/auth/pin', { method: 'PATCH', body: { currentPin, newPin, confirmPin } }),
   },
   funds: {
     create: (body: CreateSusuPayload) => request<FundSummary>('/funds', { method: 'POST', body }),

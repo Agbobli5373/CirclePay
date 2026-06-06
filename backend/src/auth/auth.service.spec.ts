@@ -105,4 +105,56 @@ describe('AuthService', () => {
     expect(redis.del).toHaveBeenCalledWith('pin:fail:u1')
     expect(tokens.issueSession).toHaveBeenCalled()
   })
+
+  it('changePin verifies the current PIN, stores a new hash, and clears fails', async () => {
+    const argon = require('argon2')
+    const pinHash = await argon.hash('5071', { type: argon.argon2id })
+    const db = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'u1', isOpsAdmin: false, pinHash }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+    }
+    const redis = { exists: jest.fn().mockResolvedValue(false), del: jest.fn() }
+    const svc = new AuthService(db as never, redis as never, {} as never, {} as never, {} as never, config)
+    const out = await svc.changePin(
+      { id: 'u1', isOpsAdmin: false } as never,
+      { currentPin: '5071', newPin: '8240', confirmPin: '8240' } as never,
+    )
+    expect(out).toEqual({ ok: true })
+    const updArg = db.user.update.mock.calls[0][0]
+    expect(updArg.where).toEqual({ id: 'u1' })
+    expect(updArg.data.pinHash).toBeDefined()
+    expect(updArg.data.pinHash).not.toBe(pinHash) // re-hashed to the new PIN
+    expect(redis.del).toHaveBeenCalledWith('pin:fail:u1')
+  })
+
+  it('changePin rejects a wrong current PIN with PIN_INVALID and does not update', async () => {
+    const argon = require('argon2')
+    const pinHash = await argon.hash('5071', { type: argon.argon2id })
+    const db = {
+      user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', isOpsAdmin: false, pinHash }), update: jest.fn() },
+    }
+    const redis = { exists: jest.fn().mockResolvedValue(false), incrWithTtl: jest.fn().mockResolvedValue(1), setEx: jest.fn(), del: jest.fn() }
+    const svc = new AuthService(db as never, redis as never, {} as never, {} as never, {} as never, config)
+    await expect(
+      svc.changePin({ id: 'u1' } as never, { currentPin: '0000', newPin: '8240', confirmPin: '8240' } as never),
+    ).rejects.toMatchObject({ response: { code: 'PIN_INVALID' } })
+    expect(db.user.update).not.toHaveBeenCalled()
+    expect(redis.incrWithTtl).toHaveBeenCalled()
+  })
+
+  it('changePin locks after PIN_MAX_ATTEMPTS bad current-PIN attempts', async () => {
+    const argon = require('argon2')
+    const pinHash = await argon.hash('5071', { type: argon.argon2id })
+    const db = {
+      user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', isOpsAdmin: false, pinHash }), update: jest.fn() },
+    }
+    const redis = { exists: jest.fn().mockResolvedValue(false), incrWithTtl: jest.fn().mockResolvedValue(5), setEx: jest.fn(), del: jest.fn() }
+    const svc = new AuthService(db as never, redis as never, {} as never, {} as never, {} as never, config)
+    await expect(
+      svc.changePin({ id: 'u1' } as never, { currentPin: '0000', newPin: '8240', confirmPin: '8240' } as never),
+    ).rejects.toMatchObject({ status: 423 })
+    expect(redis.setEx).toHaveBeenCalledWith('pin:lock:u1', '1', expect.any(Number))
+  })
 })

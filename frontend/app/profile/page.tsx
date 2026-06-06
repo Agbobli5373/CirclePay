@@ -4,8 +4,9 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/app-shell'
-import { ShieldCheck, KeyRound, Fingerprint, Lock, ChevronRight, CheckCircle2, Loader2, Pencil, Check, X, AlertCircle } from 'lucide-react'
+import { ShieldCheck, KeyRound, Fingerprint, Lock, ChevronRight, CheckCircle2, Loader2, Pencil, Check, X, AlertCircle, User } from 'lucide-react'
 import { useMe, useFunds, useLogout, useUpdateProfile } from '@/lib/queries'
+import { ChangePinDialog } from '@/components/change-pin-dialog'
 
 const STANDING: Record<string, { label: string; segments: number }> = {
   new_: { label: 'New member', segments: 1 },
@@ -31,8 +32,7 @@ export default function ProfilePage() {
   const { data: funds } = useFunds('mine')
   const logout = useLogout()
   const updateProfile = useUpdateProfile()
-  const [biometric, setBiometric] = useState(true)
-  const [appLock, setAppLock] = useState(false)
+  const [showChangePin, setShowChangePin] = useState(false)
   const [editingName, setEditingName] = useState(false)
   const [draftName, setDraftName] = useState('')
 
@@ -62,6 +62,7 @@ export default function ProfilePage() {
   }
 
   const standing = STANDING[me.trust?.standing ?? 'new_'] ?? STANDING.new_
+  const hasName = Boolean(me.name && me.name.trim())
   const stats = [
     { label: 'Funds completed', value: String(me.trust?.fundsCompleted ?? 0) },
     { label: 'On-time rate', value: `${me.trust?.onTimeRate ?? 100}%` },
@@ -91,7 +92,7 @@ export default function ProfilePage() {
         {/* Identity */}
         <div className="cp-card p-5 flex items-center gap-4">
           <div className="h-16 w-16 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xl font-semibold flex-shrink-0">
-            {initialsOf(me.name, me.phone)}
+            {hasName ? initialsOf(me.name, me.phone) : <User className="h-7 w-7" />}
           </div>
           <div className="min-w-0 flex-1">
             {editingName ? (
@@ -114,18 +115,20 @@ export default function ProfilePage() {
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-semibold text-foreground truncate">{me.name?.trim() || prettyPhone(me.phone)}</h1>
+                <h1 className="text-xl font-semibold text-foreground truncate">{hasName ? me.name : prettyPhone(me.phone)}</h1>
                 <button
                   onClick={() => { setDraftName(me.name ?? ''); setEditingName(true) }}
                   className="p-1.5 rounded-lg text-secondary hover:text-primary hover:bg-muted transition-colors flex-shrink-0"
-                  aria-label="Edit name"
-                  title="Edit name"
+                  aria-label={hasName ? 'Edit name' : 'Add your name'}
+                  title={hasName ? 'Edit name' : 'Add your name'}
                 >
                   <Pencil className="h-4 w-4" />
                 </button>
               </div>
             )}
-            <p className="text-sm text-secondary">{prettyPhone(me.phone)} · {me.network} MoMo</p>
+            <p className="text-sm text-secondary">
+              {hasName ? `${prettyPhone(me.phone)} · ${me.network} MoMo` : `${me.network} MoMo`}
+            </p>
           </div>
         </div>
 
@@ -167,7 +170,10 @@ export default function ProfilePage() {
         <div className="space-y-2">
           <h2 className="text-lg font-semibold text-foreground px-1">Security</h2>
           <div className="cp-card divide-y divide-border overflow-hidden">
-            <button className="w-full flex items-center gap-3 p-4 hover:bg-muted/40 transition-colors text-left">
+            <button
+              onClick={() => setShowChangePin(true)}
+              className="w-full flex items-center gap-3 p-4 hover:bg-muted/40 transition-colors text-left"
+            >
               <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                 <KeyRound className="h-5 w-5 text-primary" />
               </div>
@@ -179,25 +185,25 @@ export default function ProfilePage() {
             </button>
 
             <div className="flex items-center gap-3 p-4">
-              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <Fingerprint className="h-5 w-5 text-primary" />
+              <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                <Fingerprint className="h-5 w-5 text-secondary" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-foreground">Biometric unlock</p>
-                <p className="text-xs text-secondary">Use fingerprint to approve payments</p>
+                <p className="text-xs text-secondary">Approve payments with your fingerprint</p>
               </div>
-              <Toggle on={biometric} onClick={() => setBiometric((v) => !v)} label="Biometric unlock" />
+              <span className="cp-pill flex-shrink-0">Soon</span>
             </div>
 
             <div className="flex items-center gap-3 p-4">
-              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <Lock className="h-5 w-5 text-primary" />
+              <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                <Lock className="h-5 w-5 text-secondary" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-foreground">App lock</p>
-                <p className="text-xs text-secondary">Require PIN every time you open CirclePay</p>
+                <p className="text-xs text-secondary">Require your PIN each time you open CirclePay</p>
               </div>
-              <Toggle on={appLock} onClick={() => setAppLock((v) => !v)} label="App lock" />
+              <span className="cp-pill flex-shrink-0">Soon</span>
             </div>
           </div>
         </div>
@@ -209,28 +215,9 @@ export default function ProfilePage() {
         >
           {logout.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sign out'}
         </button>
+
+        <ChangePinDialog open={showChangePin} onClose={() => setShowChangePin(false)} />
       </div>
     </AppShell>
-  )
-}
-
-function Toggle({ on, onClick, label }: { on: boolean; onClick: () => void; label: string }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      aria-label={label}
-      onClick={onClick}
-      className={`relative inline-flex items-center h-6 w-11 rounded-full transition-colors flex-shrink-0 ${
-        on ? 'bg-primary' : 'bg-muted'
-      }`}
-    >
-      <span
-        className={`inline-block h-5 w-5 rounded-full bg-white transition-transform ${
-          on ? 'translate-x-[22px]' : 'translate-x-0.5'
-        }`}
-      />
-    </button>
   )
 }

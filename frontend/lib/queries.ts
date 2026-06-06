@@ -134,6 +134,13 @@ export function useUpdateProfile() {
   })
 }
 
+export function useChangePin() {
+  return useMutation({
+    mutationFn: ({ currentPin, newPin, confirmPin }: { currentPin: string; newPin: string; confirmPin: string }) =>
+      api.auth.changePin(currentPin, newPin, confirmPin),
+  })
+}
+
 export function useLogin() {
   const qc = useQueryClient()
   return useMutation({
