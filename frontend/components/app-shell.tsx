@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { Home, Wallet, Users, ActivitySquare, User, ChevronLeft, ChevronRight, LogOut, Loader2 } from 'lucide-react'
 import { Logo, LogoMark } from './logo'
 import { NotificationsBell } from './notifications-bell'
@@ -94,7 +95,7 @@ export function AppShell({ children, currentPage = 'home' }: AppShellProps) {
             const Icon = item.icon
             const isActive = currentPage === item.id
             const link = (
-              <a
+              <Link
                 href={item.href}
                 className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors ${
                   isActive
@@ -104,7 +105,7 @@ export function AppShell({ children, currentPage = 'home' }: AppShellProps) {
               >
                 <Icon className="h-5 w-5 flex-shrink-0" />
                 {isSidebarOpen && <span>{item.label}</span>}
-              </a>
+              </Link>
             )
 
             if (isSidebarOpen) {
@@ -124,7 +125,7 @@ export function AppShell({ children, currentPage = 'home' }: AppShellProps) {
         <div className="p-3 border-t border-border">
           {(() => {
             const account = (
-              <a
+              <Link
                 href="/profile"
                 className={`flex items-center gap-3 rounded-2xl p-2 hover:bg-muted transition-colors ${!isSidebarOpen && 'justify-center'}`}
               >
@@ -137,7 +138,7 @@ export function AppShell({ children, currentPage = 'home' }: AppShellProps) {
                     <p className="text-xs text-secondary">{standing}</p>
                   </div>
                 )}
-              </a>
+              </Link>
             )
 
             if (isSidebarOpen) return account
@@ -186,7 +187,7 @@ export function AppShell({ children, currentPage = 'home' }: AppShellProps) {
           const Icon = item.icon
           const isActive = currentPage === item.id
           return (
-            <a
+            <Link
               key={item.id}
               href={item.href}
               className={`flex flex-1 flex-col items-center justify-center gap-1 rounded-lg p-2 text-xs font-medium transition-colors ${
@@ -195,7 +196,7 @@ export function AppShell({ children, currentPage = 'home' }: AppShellProps) {
             >
               <Icon className="h-5 w-5" />
               <span>{item.label}</span>
-            </a>
+            </Link>
           )
         })}
       </nav>
