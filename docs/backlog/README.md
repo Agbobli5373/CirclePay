@@ -72,17 +72,18 @@ E7/E8 full medical payouts (escrow + receipt-gated tranches) · E9 Activity & no
 
 ## Status (as built — consolidation checkpoint)
 
-- **Done & verified:** E0, E1, E2, E3, E4, E5, **E6** (trust moat), plus the frontend Susu hero-loop wiring (onboarding, funds, create, pay, activity, profile) and name capture. Backend ~115 tests green.
-- **Deferred (the next epics):** shortfall coverage (deposit/safety-pool consumption + `ShortfallCovered`) and **deposit collection** itself (`requiresDeposit` is rejected at create for now); **reconciliation cron** + reading the real `moolre_fee` (E12/E13); **EM** Medical MVP; **E10** USSD; **E11** AI advisor.
-- **Not yet proven:** a real Moolre sandbox collect/transfer (no live creds yet) — the money path is verified via seeded settlement events + unit tests.
+- **Done & verified:** E0, E1, E2, E3, E4, E5, **E6** (trust moat), **EM Medical MVP** (create → public donate → ops verify → single verified payout), plus the full frontend wiring (onboarding, funds, create, pay, activity, profile, invitations bell, public `/f/[slug]` donate page, in-app `/fundraisers/[id]`) and name capture. Backend ~156 tests green.
+- **Dev mock Moolre:** `MOOLRE_MOCK_ENABLED=true` runs an in-process fake that self-settles collect/transfer via the real webhook pipeline — the whole money path (Susu + Medical) is now testable locally without live Moolre. Hard-guarded off in production.
+- **Deferred (the next epics):** shortfall coverage (deposit/safety-pool consumption + `ShortfallCovered`) and **deposit collection** itself (`requiresDeposit` is rejected at create for now); medical **escrow + receipt-gated tranches / `individual_cash`** (E7/E8); **reconciliation cron** + reading the real `moolre_fee` (E12/E13); **E10** USSD; **E11** AI advisor.
+- **Not yet proven:** a real Moolre **live** collect/transfer — API access isn't activated on the account yet (`AIN04`). The money path is verified via the mock + seeded settlement events + unit tests; flip `MOOLRE_MOCK_ENABLED=false` once Moolre activates API access.
 
 ## Known frontend placeholders (intentional, tracked)
 
 These ship as mock/stub UI until their epic lands — left as-is deliberately:
 - **Pools** (`/pools`) — mock; no backend concept (overlaps with Funds). Revisit or retire.
 - **AI Advisor** (`/advisor`, linked from Home + Create) — scripted stub → **E11**.
-- **Medical** (`/funds/kofi-mensah`, `/f/kofi-mensah`, the Medical branch of `/create`) — mock/orphaned → **EM** (create currently toasts "coming soon").
-- Dead notification bell; dead `funds.list('all')` branch (list is mine-only) — trivial future tidy.
+- ~~Medical mock pages~~ — **shipped** (EM): real `/f/[slug]` + `/fundraisers/[id]`; the kofi-mensah mocks were removed and create now posts to the backend.
+- ~~Dead notification bell~~ — **shipped**: the bell now surfaces pending invitations. Dead `funds.list('all')` branch (list is mine-only) remains a trivial future tidy.
 
 ## Suggested sequencing & milestones
 

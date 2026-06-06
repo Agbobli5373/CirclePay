@@ -1,5 +1,7 @@
 # EM · Medical Fund (MVP / lite)
 
+> **Status: BUILT (as of this checkpoint).** New `fundraisers` feature module (`backend/src/fundraisers/`) — INFRA-only deps. Endpoints: `POST /fundraisers` (create), `GET /public/fundraisers/:slug` + `POST .../contribute` + `GET .../donations/:donationId` (public, no auth), `POST /fundraisers/:id/verify-payee` (ops), `POST /fundraisers/:id/release` (organizer). Donations: `Contributor` rows, externalref `mc:{fundId}:{donationId}`, settled via `DonationSettled`; payout: `PayoutTranche`, externalref `mp:{fundId}:1` (exactly-once), settled via `MedicalPayoutSettled` → fund `completed`. Frontend: real `/f/[slug]` public donate page + `/fundraisers/[id]` in-app detail; create Medical branch wired; kofi-mensah mocks removed. Verified end-to-end on the **mock Moolre** (`MOOLRE_MOCK_ENABLED=true`). **Deferred to E7/E8:** `individual_cash`, escrow + receipt-gated tranches, caps/guarantor, donor refunds, receipt upload/verify UI.
+
 **Goal:** A donor-facing medical fundraiser for the demo: create a fund, share a public page, contribute via MoMo, and (when verified) pay the hospital — using the **simplest payout route only** for MVP, with the richer escrow/tranche model deferred to E7/E8.
 
 **MVP scope:** routes `hospital_momo` and `hospital_bank` (single verified payout); **defer** `individual_cash` escrow + receipt-gated tranches, guarantors, and refunds to `BACKLOG-later.md`. Donor transparency badge is in-scope.
