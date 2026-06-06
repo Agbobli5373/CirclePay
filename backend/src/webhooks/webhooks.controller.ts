@@ -129,6 +129,6 @@ function resolveEventType(ref: string): string | null {
   if (ref.startsWith('p:')) return 'PayoutSettled'
   if (ref.startsWith('d:')) return 'DepositSettled'
   if (ref.startsWith('mp:')) return 'MedicalPayoutSettled'
-  if (ref.startsWith('mc:')) return 'ContributionSettled' // medical contribution
+  if (ref.startsWith('mc:')) return 'DonationSettled' // medical donation (handled by fundraisers)
   return null
 }

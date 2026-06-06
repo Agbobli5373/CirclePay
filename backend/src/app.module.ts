@@ -10,6 +10,7 @@ import { NotificationsModule } from './notifications/notifications.module'
 import { AuthModule } from './auth/auth.module'
 import { FundsModule } from './funds/funds.module'
 import { ContributionsModule } from './contributions/contributions.module'
+import { FundraisersModule } from './fundraisers/fundraisers.module'
 import { PayoutsModule } from './payouts/payouts.module'
 import { ActivityModule } from './activity/activity.module'
 import { TrustModule } from './trust/trust.module'
@@ -27,6 +28,7 @@ import { HealthModule } from './health/health.module'
     AuthModule,
     FundsModule,
     ContributionsModule,
+    FundraisersModule,
     PayoutsModule,
     ActivityModule,
     TrustModule,

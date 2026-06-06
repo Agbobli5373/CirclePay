@@ -90,6 +90,12 @@ enum InviteStatus {
   declined
 }
 
+enum DonationStatus {
+  initiated
+  settled
+  failed
+}
+
 enum MedicalPayoutRoute {
   hospital_momo
   hospital_bank
@@ -324,14 +330,21 @@ model Payout {
 }
 
 model Contributor {
-  id          String   @id @default(cuid())
+  id          String         @id @default(cuid())
   fundId      String
-  fund        Fund     @relation(fields: [fundId], references: [id], onDelete: Cascade)
-  displayName String   // "Anonymous" when anonymous
-  amount      Int      // pesewas
-  anonymous   Boolean  @default(false)
+  fund        Fund           @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  displayName String         // "Anonymous" when anonymous
+  amount      Int            // pesewas
+  anonymous   Boolean        @default(false)
   userId      String?
-  ts          DateTime @default(now())
+  // Donation transaction tracking (collect → settle). Only `settled` rows count toward `raised`.
+  externalref String?        @unique // mc:{fundId}:{donationId}
+  status      DonationStatus @default(initiated)
+  phone       String?        // payer MoMo (for the collect + receipt)
+  network     String?        // MTN | Telecel | AirtelTigo
+  ts          DateTime       @default(now())
+
+  @@index([fundId, status])
 }
 
 model TrustScore {
