@@ -224,6 +224,57 @@ export function payoutPostings(input: {
   return postings
 }
 
+/**
+ * Balanced postings for a settled member deposit (the safety buffer collected on join).
+ * Cash lands in the Moolre float; the member's `deposit` account holds it as a liability
+ * (negative balance = we owe it back), mirroring how the pot holds contributions.
+ */
+export function depositPostings(input: {
+  moolreFloatAccountId: string
+  depositAccountId: string
+  amount: Pesewas
+  moolreFee?: Pesewas
+  moolreFeeAccountId?: string
+}): Posting[] {
+  const moolreFee = input.moolreFee ?? 0
+  const postings: Posting[] = [
+    { accountId: input.moolreFloatAccountId, amount: input.amount - moolreFee },
+    { accountId: input.depositAccountId, amount: -input.amount },
+  ]
+  if (moolreFee > 0) {
+    if (!input.moolreFeeAccountId) throw new Error('moolreFeeAccountId required when moolreFee > 0')
+    postings.push({ accountId: input.moolreFeeAccountId, amount: moolreFee })
+  }
+  assertBalanced(postings)
+  return postings
+}
+
+/**
+ * Balanced postings that cover a cycle shortfall when a member defaults: draw from the
+ * defaulter's held `deposit` first, then the `safety_pool`, into the fund pot — so the
+ * cycle's payee is still paid in full. Consuming a holding moves it toward zero (+used),
+ * and the pot fills (−used), exactly as if the member had contributed.
+ * Order/availability is decided by the caller (deposit before pool); pass only what's used.
+ */
+export function shortfallPostings(input: {
+  fundPotAccountId: string
+  depositAccountId: string
+  depositUsed: Pesewas
+  safetyPoolAccountId?: string
+  poolUsed?: Pesewas
+}): Posting[] {
+  const poolUsed = input.poolUsed ?? 0
+  const postings: Posting[] = []
+  if (input.depositUsed > 0) postings.push({ accountId: input.depositAccountId, amount: input.depositUsed })
+  if (poolUsed > 0) {
+    if (!input.safetyPoolAccountId) throw new Error('safetyPoolAccountId required when poolUsed > 0')
+    postings.push({ accountId: input.safetyPoolAccountId, amount: poolUsed })
+  }
+  postings.push({ accountId: input.fundPotAccountId, amount: -(input.depositUsed + poolUsed) })
+  assertBalanced(postings)
+  return postings
+}
+
 // ---------- Medical payout tranches ----------
 
 /**

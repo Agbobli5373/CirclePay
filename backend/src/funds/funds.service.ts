@@ -79,10 +79,6 @@ export class FundsService {
 
   async createSusu(userId: string, dto: CreateFundDto): Promise<FundSummaryDto> {
     await this.assertCanJoin(userId)
-    if (dto.requiresDeposit) {
-      // Deposit collection + shortfall coverage are a later phase — don't let a member dead-end.
-      throw new BadRequestException({ code: 'DEPOSIT_NOT_SUPPORTED', message: 'Deposit-required Susu are coming soon' })
-    }
 
     const fund = await this.db.$transaction(async (tx) => {
       const created = await tx.fund.create({

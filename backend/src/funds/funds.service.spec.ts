@@ -92,15 +92,29 @@ describe('FundsService.createSusu', () => {
     expect(db.$transaction).not.toHaveBeenCalled()
   })
 
-  it('rejects requiresDeposit until deposit collection is built (400)', async () => {
+  it('creates a deposit-required Susu (admin member starts unpaid, owing a deposit)', async () => {
+    const created = fund({ memberCount: 3, requiresDeposit: true, depositAmount: 20000, members: [{ userId: 'u1', role: 'admin' }] })
+    const tx = { fund: { create: jest.fn().mockResolvedValue(created) } }
     const db = {
       trustScore: { findUnique: jest.fn().mockResolvedValue({ standing: 'good' }) },
-      $transaction: jest.fn(),
+      $transaction: jest.fn(async (cb: (t: unknown) => unknown) => cb(tx)),
     }
-    await expect(
-      makeSvc(db).createSusu('u1', { requiresDeposit: true, memberCount: 3 } as never),
-    ).rejects.toMatchObject({ response: { code: 'DEPOSIT_NOT_SUPPORTED' } })
-    expect(db.$transaction).not.toHaveBeenCalled()
+    await makeSvc(db).createSusu('u1', {
+      type: 'Susu',
+      name: 'Deposit Circle',
+      contribution: 50000,
+      frequency: 'monthly',
+      memberCount: 3,
+      startDate: new Date(),
+      payoutRule: 'rotating',
+      requiresDeposit: true,
+      depositAmount: 20000,
+    } as never)
+    expect(db.$transaction).toHaveBeenCalled()
+    const arg = tx.fund.create.mock.calls[0][0]
+    expect(arg.data.susu.create.requiresDeposit).toBe(true)
+    expect(arg.data.susu.create.depositAmount).toBe(20000)
+    expect(arg.data.members.create.depositPaid).toBe(false) // owes a deposit until paid
   })
 })
 

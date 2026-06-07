@@ -36,5 +36,12 @@ export const inviteMembersSchema = z.object({
   phones: z.array(phoneSchema).min(1, 'Add at least one number').max(50),
 })
 
+/** Initiate a member's security-deposit collection via MoMo (with OTP). */
+export const initiateDepositSchema = z.object({
+  fundId: z.string().min(1),
+  otpcode: z.string().regex(/^\d{6}$/, 'Enter the 6-digit code').optional(),
+})
+
 export type CreateSusuFundInput = z.infer<typeof createSusuFundSchema>
 export type InviteMembersInput = z.infer<typeof inviteMembersSchema>
+export type InitiateDepositInput = z.infer<typeof initiateDepositSchema>
