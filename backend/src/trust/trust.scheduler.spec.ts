@@ -33,11 +33,12 @@ function deps(defaulters: unknown[], overdue: unknown[], opts: Opts = {}) {
   return { svc, db, tx, notifications, ledger, outbox }
 }
 
-const member = (id: string, userId: string) => ({
+const member = (id: string, userId: string, fundStatus: string = 'active') => ({
   id,
   userId,
   fundId: 'f1',
   status: 'overdue',
+  fundStatus,
   user: { phone: '+233240000001' },
   fund: { name: 'Kumasi Traders' },
 })
@@ -88,5 +89,21 @@ describe('TrustScheduler.sweep', () => {
     await svc.sweep()
     expect(ledger.post).not.toHaveBeenCalled()
     expect(outbox.emit).not.toHaveBeenCalled()
+  })
+
+  it('re-covers an ALREADY-defaulted member in a later cycle without re-locking', async () => {
+    const { svc, tx, ledger, outbox } = deps([member('m1', 'u1', 'defaulted')], [], {
+      susu: { ...startedSusu, currentCycle: 2 },
+      balances: { 'deposit:u1': -50000, 'safety_pool:GLOBAL': 0 }, // deposit still has funds
+      paidCount: 1,
+    })
+    await svc.sweep()
+    // Coverage recurs for the new cycle…
+    expect(ledger.post).toHaveBeenCalledWith(expect.objectContaining({ kind: 'adjustment' }), tx)
+    expect(outbox.emit).toHaveBeenCalledWith('ShortfallCovered', expect.objectContaining({ cycle: 2 }), tx)
+    expect(tx.member.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'paid' }) }))
+    // …but the member is NOT re-locked (already defaulted).
+    expect(tx.trustScore.update).not.toHaveBeenCalled()
+    expect(tx.member.update).not.toHaveBeenCalledWith(expect.objectContaining({ data: { fundStatus: 'defaulted' } }))
   })
 })

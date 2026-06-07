@@ -44,20 +44,26 @@ export class TrustScheduler {
     const defaultBefore = new Date(now.getTime() - graceHours * 60 * 60 * 1000)
     const inStartedSusu = { fund: { status: 'active', susu: { is: { startedAt: { not: null } } } } } as const
 
-    // 1) Defaults — unpaid past the grace window → defaulted + platform-wide lock.
-    const defaulters = await this.db.member.findMany({
+    // 1) Past-grace unpaid members → lock on FIRST default, and cover the missed cycle from
+    //    their deposit (then the safety pool). Coverage recurs PER CYCLE while funds remain, so
+    //    already-'defaulted' members are re-swept each cycle (not one-shot) — keyed by the current
+    //    cycle's `sf:` externalref, idempotent within a cycle via the member's status='paid' guard.
+    const pastGrace = await this.db.member.findMany({
       where: {
-        fundStatus: { in: ['active', 'grace'] },
+        fundStatus: { in: ['active', 'grace', 'defaulted'] },
         status: { in: ['pending', 'overdue'] },
         dueAt: { lt: defaultBefore },
         ...inStartedSusu,
       },
       include: { user: true, fund: true },
     })
-    for (const m of defaulters) {
-      // Can we cover this cycle from the defaulter's deposit (then the safety pool)?
-      // Resolve accounts + read balances BEFORE the tx (account upserts/balance reads
-      // commit independently — same pattern as contribution settlement).
+    let newlyDefaulted = 0
+    let coveredCount = 0
+    for (const m of pastGrace) {
+      const firstDefault = m.fundStatus !== 'defaulted'
+      // Can we cover THIS cycle from the member's deposit (then the safety pool)?
+      // Resolve accounts + read balances BEFORE the tx (idempotent upserts/reads commit
+      // independently — same pattern as contribution settlement).
       const susu = await this.db.susuDetail.findUnique({ where: { fundId: m.fundId } })
       let coverage: { potId: string; depId: string; poolId: string; useDeposit: number; usePool: number; cycle: number } | null = null
       if (susu?.startedAt && susu.contribution > 0 && m.status !== 'paid') {
@@ -68,9 +74,10 @@ export class TrustScheduler {
         ])
         const need = susu.contribution
         // Holdings are negative balances; available = how much we hold for them.
-        const depositAvail = Math.max(0, -(await this.ledger.balance(depAcc.id)))
+        const [depBal, poolBal] = await Promise.all([this.ledger.balance(depAcc.id), this.ledger.balance(poolAcc.id)])
+        const depositAvail = Math.max(0, -depBal)
         const useDeposit = Math.min(need, depositAvail)
-        const poolAvail = Math.max(0, -(await this.ledger.balance(poolAcc.id)))
+        const poolAvail = Math.max(0, -poolBal)
         const usePool = Math.min(need - useDeposit, poolAvail)
         if (useDeposit + usePool >= need) {
           coverage = { potId: potAcc.id, depId: depAcc.id, poolId: poolAcc.id, useDeposit, usePool, cycle: susu.currentCycle }
@@ -78,17 +85,20 @@ export class TrustScheduler {
       }
 
       await this.db.$transaction(async (tx) => {
-        await tx.member.update({ where: { id: m.id }, data: { fundStatus: 'defaulted' } })
-        await tx.trustScore.update({ where: { userId: m.userId }, data: { standing: 'locked' } })
-        await tx.activityItem.create({
-          data: {
-            userId: m.userId,
-            type: 'joined',
-            title: 'Account locked — missed contribution',
-            detail: m.fund.name,
-            reference: m.fundId,
-          },
-        })
+        // Lock the member platform-wide on the FIRST default only (don't re-lock each cycle).
+        if (firstDefault) {
+          await tx.member.update({ where: { id: m.id }, data: { fundStatus: 'defaulted' } })
+          await tx.trustScore.update({ where: { userId: m.userId }, data: { standing: 'locked' } })
+          await tx.activityItem.create({
+            data: {
+              userId: m.userId,
+              type: 'joined',
+              title: 'Account locked — missed contribution',
+              detail: m.fund.name,
+              reference: m.fundId,
+            },
+          })
+        }
 
         if (coverage) {
           const ref = `sf:${m.fundId}:${coverage.cycle}:${m.userId}`
@@ -106,14 +116,14 @@ export class TrustScheduler {
             },
             tx,
           )
-          // The cycle obligation is now met (via coverage), though the member stays defaulted.
+          // This cycle's obligation is now met (via coverage); the member stays defaulted/locked.
           await tx.member.update({ where: { id: m.id }, data: { status: 'paid', paidAt: new Date() } })
           await tx.activityItem.create({
             data: {
               userId: m.userId,
               type: 'contribution',
               title: 'Cycle covered from your deposit',
-              detail: m.fund.name,
+              detail: `${m.fund.name} · cycle ${coverage.cycle}`,
               amount: coverage.useDeposit + coverage.usePool,
               direction: 'out_',
               reference: ref,
@@ -129,13 +139,21 @@ export class TrustScheduler {
         }
       })
 
-      this.logger.warn(`Member defaulted → locked: user ${m.userId} (fund ${m.fundId})${coverage ? ' — cycle covered from deposit' : ''}`)
-      await this.safeSms(
-        m.user.phone,
-        coverage
-          ? `CirclePay: your ${m.fund.name} contribution was overdue, so your security deposit covered this cycle. Your account is locked across CirclePay until resolved — reply to appeal.`
-          : `CirclePay: your ${m.fund.name} contribution is overdue past the grace window. Your account is now locked across CirclePay until resolved — reply to appeal.`,
-      )
+      if (firstDefault) newlyDefaulted++
+      if (coverage) coveredCount++
+
+      if (firstDefault) {
+        this.logger.warn(`Member defaulted → locked: user ${m.userId} (fund ${m.fundId})${coverage ? ' — cycle covered from deposit' : ''}`)
+        await this.safeSms(
+          m.user.phone,
+          coverage
+            ? `CirclePay: your ${m.fund.name} contribution was overdue, so your security deposit covered this cycle. Your account is locked across CirclePay until resolved — reply to appeal.`
+            : `CirclePay: your ${m.fund.name} contribution is overdue past the grace window. Your account is now locked across CirclePay until resolved — reply to appeal.`,
+        )
+      } else if (coverage) {
+        this.logger.log(`Re-covered cycle ${coverage.cycle} from deposit: user ${m.userId} (fund ${m.fundId})`)
+        await this.safeSms(m.user.phone, `CirclePay: your security deposit covered cycle ${coverage.cycle} of ${m.fund.name}.`)
+      }
     }
 
     // 2) Overdue (still within grace) — flag + nudge.
@@ -151,8 +169,8 @@ export class TrustScheduler {
       )
     }
 
-    if (defaulters.length || overdue.length) {
-      this.logger.log(`Trust sweep: ${overdue.length} overdue, ${defaulters.length} defaulted`)
+    if (pastGrace.length || overdue.length) {
+      this.logger.log(`Trust sweep: ${overdue.length} overdue, ${newlyDefaulted} newly defaulted, ${coveredCount} cycle(s) covered`)
     }
   }
 
