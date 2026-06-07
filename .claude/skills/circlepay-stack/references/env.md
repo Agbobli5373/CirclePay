@@ -45,6 +45,8 @@ MOOLRE_SUBLIST_ID=               # beneficiary sublist for disbursements/payouts
 MOOLRE_TIMEOUT_MS=15000          # per-request HTTP timeout so a payment call never hangs the worker
 MOOLRE_MOCK_ENABLED=false        # DEV ONLY: in-process Moolre mock (self-settles via webhook); ignored in production
 MOOLRE_MOCK_SETTLE_MS=2500       # delay before the mock's settlement webhook fires
+USSD_GATEWAY_SECRET=change-me    # E10: guards POST /api/ussd/<secret> (like the Moolre webhook secret)
+USSD_SESSION_TTL_SECONDS=120     # how long an idle USSD session's Redis state is kept
 
 # Jobs / locks / queue (concurrency — see operations.md)
 REDIS_URL=redis://localhost:6380   # REQUIRED: ephemeral auth state (OTP, lockout, sessions)
