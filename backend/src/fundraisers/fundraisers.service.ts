@@ -15,6 +15,7 @@ import { payoutPostings } from '@circlepay/shared'
 import { PrismaService } from '../prisma/prisma.service'
 import { MoolreService } from '../moolre/moolre.service'
 import { MoolreError, TransferChannel } from '../moolre/moolre.client'
+import { collectionChannelFor, transferChannelFor, toMoolrePayer, ghs } from '../moolre/moolre.format'
 import { LedgerService } from '../ledger/ledger.service'
 import { NotificationsService } from '../notifications/notifications.service'
 import { OutboxDispatcher } from '../outbox/outbox.dispatcher'
@@ -26,24 +27,6 @@ import type {
   ThankContributorsDto,
 } from './dto/fundraisers.dto'
 
-/** MoMo collection channel per network. */
-function collectionChannel(network: string): '13' | '6' | '7' {
-  if (network === 'Telecel') return '6'
-  if (network === 'AirtelTigo') return '7'
-  return '13'
-}
-function toMoolrePayer(phone: string): string {
-  return phone.replace(/^\+/, '')
-}
-/** Disbursement (transfer) channel for a payee MoMo network; defaults to MTN. */
-function transferChannelFor(network: string | null | undefined): TransferChannel {
-  if (network === 'Telecel') return TransferChannel.Telecel
-  if (network === 'AirtelTigo') return TransferChannel.AirtelTigo
-  return TransferChannel.MTN
-}
-function ghs(pesewas: number): string {
-  return (pesewas / 100).toFixed(2)
-}
 function slugify(s: string): string {
   const base = s
     .toLowerCase()
@@ -166,7 +149,7 @@ export class FundraisersService implements OnModuleInit {
 
     try {
       const res = await this.moolre.collect({
-        channel: collectionChannel(dto.network),
+        channel: collectionChannelFor(dto.network),
         payer: toMoolrePayer(dto.phone),
         amount: ghs(dto.amount),
         externalref,

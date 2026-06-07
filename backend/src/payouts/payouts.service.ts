@@ -12,19 +12,8 @@ import { LedgerService } from '../ledger/ledger.service'
 import { NotificationsService } from '../notifications/notifications.service'
 import { OutboxDispatcher } from '../outbox/outbox.dispatcher'
 import { OutboxService } from '../outbox/outbox.service'
+import { transferChannelFor, toMoolrePayer, ghs } from '../moolre/moolre.format'
 
-/** MoMo disbursement channel per network. */
-function transferChannel(network: string): '1' | '6' | '7' {
-  if (network === 'Telecel') return '6'
-  if (network === 'AirtelTigo') return '7'
-  return '1' // MTN
-}
-function toMoolrePayer(phone: string): string {
-  return phone.replace(/^\+/, '')
-}
-function ghs(pesewas: number): string {
-  return (pesewas / 100).toFixed(2)
-}
 /** Shared rules use 'new'; Prisma's enum uses 'new_'. */
 function toPrismaStanding(s: TrustStanding): string {
   return s === 'new' ? 'new_' : s
@@ -115,7 +104,7 @@ export class PayoutsService implements OnModuleInit {
     }
 
     const res = await this.moolre.transfer({
-      channel: transferChannel(payee.network),
+      channel: transferChannelFor(payee.network),
       receiver: toMoolrePayer(payee.phone),
       amount: ghs(amount),
       externalref,

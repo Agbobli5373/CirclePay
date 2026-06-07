@@ -13,24 +13,10 @@ import { Prisma } from '@prisma/client'
 import { PrismaService } from '../prisma/prisma.service'
 import { MoolreService } from '../moolre/moolre.service'
 import { MoolreError } from '../moolre/moolre.client'
+import { collectionChannelFor, toMoolrePayer, ghs } from '../moolre/moolre.format'
 import type { InitiateContributionDto } from './dto/contributions.dto'
 
 const ENDPOINT = 'POST /contributions'
-
-/** MoMo collection channel per network. */
-function channelFor(network: string): '13' | '6' | '7' {
-  if (network === 'Telecel') return '6'
-  if (network === 'AirtelTigo') return '7'
-  return '13' // MTN
-}
-/** Moolre wants the local/international number without a leading '+'. */
-function toMoolrePayer(phone: string): string {
-  return phone.replace(/^\+/, '')
-}
-/** Pesewas → GHS major-unit string, e.g. 50000 → "500.00". */
-function amountString(pesewas: number): string {
-  return (pesewas / 100).toFixed(2)
-}
 
 export interface InitiateResult {
   statusCode: number
@@ -113,9 +99,9 @@ export class ContributionsService {
 
     try {
       const result = await this.moolre.collect({
-        channel: channelFor(user.network),
+        channel: collectionChannelFor(user.network),
         payer: toMoolrePayer(user.phone),
-        amount: amountString(total),
+        amount: ghs(total),
         externalref,
         otpcode: dto.otpcode,
       })
