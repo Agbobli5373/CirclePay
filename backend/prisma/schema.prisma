@@ -33,6 +33,7 @@ enum SusuPayoutRule {
   rotating
   random
   trust_ordered
+  manual
 }
 
 enum MemberFundStatus {

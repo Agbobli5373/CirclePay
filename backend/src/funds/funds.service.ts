@@ -7,12 +7,14 @@ import {
   NotFoundException,
 } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
+import { Prisma } from '@prisma/client'
 import {
   canJoinFund,
   totalCycles,
   cyclePayoutAmount,
   cycleProgressPercent,
   resolvePayoutOrder,
+  validateReorder,
   type TrustStanding,
   type SusuPayoutRule,
 } from '@circlepay/shared'
@@ -346,30 +348,9 @@ export class FundsService {
         data: { status: 'accepted' },
       })
 
-      // Fund just filled → start the Susu: lock members + payout order (incl. random shuffle).
+      // Fund just filled → start the Susu (lock members + payout order).
       if (activeCount + 1 >= fund.susu.memberCount) {
-        const members = await tx.member.findMany({
-          where: { fundId, fundStatus: 'active' },
-          include: { user: { include: { trustScore: true } } },
-        })
-        const order = resolvePayoutOrder(
-          members.map((m) => ({
-            userId: m.userId,
-            standing: toSharedStanding(m.user.trustScore?.standing),
-            joinedAt: m.joinedAt,
-          })),
-          fund.susu.payoutRule as SusuPayoutRule,
-          fundId, // seed → deterministic 'random' order
-        )
-        await tx.susuDetail.update({
-          where: { fundId },
-          data: { startedAt: new Date(), payoutOrder: order },
-        })
-        // Set the cycle-1 contribution due date for every member (cadence-driven).
-        await tx.member.updateMany({
-          where: { fundId, fundStatus: 'active' },
-          data: { dueAt: new Date(Date.now() + cycleIntervalMs(fund.susu.frequency)) },
-        })
+        await this.startSusu(tx, fundId, fund.susu)
       }
 
       if (requiresDeposit) {
@@ -410,6 +391,82 @@ export class FundsService {
     const result = await this.join(userId, invite.fundId)
     await this.db.invite.update({ where: { id: invite.id }, data: { status: 'accepted' } })
     return { ...result, fundId: invite.fundId }
+  }
+
+  // ---------- organizer controls (start / resize / arrange) ----------
+
+  /** Start the Susu now with whoever has joined — organizer-only, before it auto-fills. */
+  async startNow(userId: string, fundId: string): Promise<{ ok: true }> {
+    return this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Fund" WHERE id = ${fundId} FOR UPDATE`
+      const fund = await tx.fund.findUnique({ where: { id: fundId }, include: { susu: true } })
+      if (!fund || !fund.susu) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Fund not found' })
+      if (fund.createdById !== userId) throw new ForbiddenException({ code: 'NOT_ORGANIZER', message: 'Only the organizer can start this Susu' })
+      if (fund.status !== 'active') throw new ConflictException({ code: 'FUND_INACTIVE', message: 'This fund is not open' })
+      if (isSusuStarted(fund.susu)) throw new ConflictException({ code: 'ALREADY_STARTED', message: 'This Susu has already started' })
+      const activeCount = await tx.member.count({ where: { fundId, fundStatus: 'active' } })
+      if (activeCount < 2) throw new BadRequestException({ code: 'TOO_FEW_MEMBERS', message: 'At least 2 members must join before starting' })
+      // Start with who's in: shrink the circle to the joined count.
+      await tx.susuDetail.update({ where: { fundId }, data: { memberCount: activeCount, totalCycles: activeCount } })
+      await this.startSusu(tx, fundId, fund.susu)
+      return { ok: true }
+    })
+  }
+
+  /** Increase / decrease the member count before the Susu starts — organizer-only. */
+  async setMemberCount(userId: string, fundId: string, memberCount: number): Promise<{ ok: true; memberCount: number }> {
+    return this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Fund" WHERE id = ${fundId} FOR UPDATE`
+      const fund = await tx.fund.findUnique({ where: { id: fundId }, include: { susu: true } })
+      if (!fund || !fund.susu) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Fund not found' })
+      if (fund.createdById !== userId) throw new ForbiddenException({ code: 'NOT_ORGANIZER', message: 'Only the organizer can resize this Susu' })
+      if (isSusuStarted(fund.susu)) throw new ConflictException({ code: 'ALREADY_STARTED', message: 'You can only resize before the Susu starts' })
+      const activeCount = await tx.member.count({ where: { fundId, fundStatus: 'active' } })
+      const floor = Math.max(2, activeCount)
+      if (memberCount < floor) {
+        throw new BadRequestException({ code: 'TOO_SMALL', message: `Can't go below the ${activeCount} member${activeCount === 1 ? '' : 's'} already in` })
+      }
+      await tx.susuDetail.update({ where: { fundId }, data: { memberCount, totalCycles: memberCount } })
+      return { ok: true, memberCount }
+    })
+  }
+
+  /**
+   * Arrange the payout order before start, or reorder strictly-future cycles during the run
+   * (already-paid + the current cycle are frozen). Organizer-only; moved members are notified.
+   */
+  async arrangePayoutOrder(userId: string, fundId: string, order: string[]): Promise<{ ok: true }> {
+    const { started, oldOrder, fundName } = await this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Fund" WHERE id = ${fundId} FOR UPDATE`
+      const fund = await tx.fund.findUnique({
+        where: { id: fundId },
+        include: { susu: true, members: { where: { fundStatus: 'active' } } },
+      })
+      if (!fund || !fund.susu) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Fund not found' })
+      if (fund.createdById !== userId) throw new ForbiddenException({ code: 'NOT_ORGANIZER', message: 'Only the organizer can arrange the payout order' })
+      if (fund.status !== 'active') throw new ConflictException({ code: 'FUND_INACTIVE', message: 'This fund is not open' })
+
+      const isStarted = isSusuStarted(fund.susu)
+      const current =
+        isStarted && Array.isArray(fund.susu.payoutOrder)
+          ? (fund.susu.payoutOrder as string[])
+          : fund.members.map((m) => m.userId)
+      const lockedCount = isStarted ? fund.susu.currentCycle : 0
+      const err = validateReorder(current, order, lockedCount)
+      if (err === 'LOCKED_CHANGED') {
+        throw new ConflictException({ code: 'LOCKED_POSITION', message: "A member who's already been paid (or the current cycle) can't be moved" })
+      }
+      if (err) {
+        throw new BadRequestException({ code: 'INVALID_ORDER', message: 'The order must list each current member exactly once' })
+      }
+      await tx.susuDetail.update({
+        where: { fundId },
+        data: isStarted ? { payoutOrder: order } : { payoutOrder: order, payoutRule: 'manual' },
+      })
+      return { started: isStarted, oldOrder: current, fundName: fund.name }
+    })
+    if (started) await this.notifyReorder(fundId, oldOrder, order, fundName)
+    return { ok: true }
   }
 
   /** DEV ONLY: backdate the caller's current-cycle due date to trigger overdue/default in a demo. */
@@ -498,6 +555,72 @@ export class FundsService {
     const trust = await this.db.trustScore.findUnique({ where: { userId } })
     if (!canJoinFund({ standing: toSharedStanding(trust?.standing) })) {
       throw new ForbiddenException({ code: 'TRUST_LOCKED', message: 'Your account is locked from joining funds' })
+    }
+  }
+
+  /**
+   * Lock a Susu's start: resolve + persist the payout order (manual preset → trust → seeded
+   * random → join order), set startedAt, and set every active member's cycle-1 due date.
+   * Shared by the auto-fill path in join() and the organizer's manual startNow().
+   */
+  private async startSusu(
+    tx: Prisma.TransactionClient,
+    fundId: string,
+    susu: { payoutRule: string; frequency: string; payoutOrder: unknown },
+  ): Promise<void> {
+    const members = await tx.member.findMany({
+      where: { fundId, fundStatus: 'active' },
+      include: { user: { include: { trustScore: true } } },
+    })
+    const preset = Array.isArray(susu.payoutOrder) ? (susu.payoutOrder as string[]) : undefined
+    const order = resolvePayoutOrder(
+      members.map((m) => ({
+        userId: m.userId,
+        standing: toSharedStanding(m.user.trustScore?.standing),
+        joinedAt: m.joinedAt,
+      })),
+      susu.payoutRule as SusuPayoutRule,
+      fundId, // seed → deterministic 'random' order
+      preset, // organizer's arrangement → 'manual'
+    )
+    await tx.susuDetail.update({ where: { fundId }, data: { startedAt: new Date(), payoutOrder: order } })
+    await tx.member.updateMany({
+      where: { fundId, fundStatus: 'active' },
+      data: { dueAt: new Date(Date.now() + cycleIntervalMs(susu.frequency)) },
+    })
+  }
+
+  /** Tell members whose cycle moved that the order changed (best-effort; never blocks the reorder). */
+  private async notifyReorder(fundId: string, oldOrder: string[], newOrder: string[], fundName: string): Promise<void> {
+    const changed = newOrder
+      .map((uid, i) => ({ uid, cycle: i + 1 }))
+      .filter((x) => oldOrder[x.cycle - 1] !== x.uid)
+    if (!changed.length) return
+    const users = await this.db.user.findMany({ where: { id: { in: changed.map((c) => c.uid) } } })
+    const byId = new Map(users.map((u) => [u.id, u]))
+    for (const c of changed) {
+      const u = byId.get(c.uid)
+      if (!u) continue
+      await this.db.activityItem
+        .create({
+          data: {
+            userId: c.uid,
+            type: 'joined',
+            title: 'Payout order updated',
+            detail: `${fundName}: your turn is now cycle ${c.cycle}`,
+            reference: fundId,
+          },
+        })
+        .catch(() => undefined)
+      try {
+        await this.notifications.sendSms(
+          u.phone,
+          `CirclePay: the payout order for ${fundName} changed — your turn is now cycle ${c.cycle}.`,
+          `reorder:${fundId}`,
+        )
+      } catch {
+        /* SMS is best-effort */
+      }
     }
   }
 

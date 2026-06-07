@@ -116,18 +116,49 @@ function seededShuffle<T>(items: T[], seed: string): T[] {
  * - `trust_ordered` → safest-first (orderPayoutsByTrust)
  * - `random`        → deterministic seeded shuffle when `seed` is given (locked in at start);
  *                     without a seed, falls back to join order (provisional display).
+ * - `manual`        → the organizer's `preset` order, filtered to current members; any member
+ *                     not in the preset (e.g. a late joiner) is appended in join order.
  */
 export function resolvePayoutOrder(
   members: { userId: string; standing: TrustStanding; joinedAt: Date | string | number }[],
   rule: SusuPayoutRule,
   seed?: string,
+  preset?: string[],
 ): string[] {
   const byJoin = [...members].sort(
     (a, b) => new Date(a.joinedAt).getTime() - new Date(b.joinedAt).getTime(),
   )
+  if (rule === 'manual' && preset?.length) {
+    const present = new Set(byJoin.map((m) => m.userId))
+    const ordered = preset.filter((id) => present.has(id))
+    const seen = new Set(ordered)
+    const rest = byJoin.map((m) => m.userId).filter((id) => !seen.has(id))
+    return [...ordered, ...rest]
+  }
   if (rule === 'trust_ordered') return orderPayoutsByTrust(byJoin).map((m) => m.userId)
   if (rule === 'random' && seed) return seededShuffle(byJoin, seed).map((m) => m.userId)
   return byJoin.map((m) => m.userId)
+}
+
+/**
+ * Validate a payout-order reorder. `next` must be a permutation of `current`, and the first
+ * `lockedCount` entries (already-paid / in-flight cycles) must be unchanged. Returns an error
+ * code when invalid, or null when the reorder is allowed.
+ *   lockedCount = startedAt ? currentCycle : 0  (strictly-future scope freezes cycles 1..current)
+ */
+export function validateReorder(
+  current: string[],
+  next: string[],
+  lockedCount: number,
+): 'LENGTH' | 'NOT_PERMUTATION' | 'LOCKED_CHANGED' | null {
+  if (next.length !== current.length) return 'LENGTH'
+  const cs = [...current].sort()
+  const ns = [...next].sort()
+  if (cs.some((v, i) => v !== ns[i])) return 'NOT_PERMUTATION'
+  for (let i = 0; i < Math.min(Math.max(0, lockedCount), current.length); i++) {
+    if (next[i] !== current[i]) return 'LOCKED_CHANGED'
+  }
+  return null
 }
 
 // ---------- Money formatting ----------

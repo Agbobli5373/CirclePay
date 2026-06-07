@@ -19,7 +19,7 @@ export type FundStatus = 'active' | 'completed' | 'cancelled'
 export type PoolStatus = 'active' | 'planning' | 'completed'
 /** A member's status within the current cycle. */
 export type MemberStatus = 'paid' | 'pending' | 'overdue'
-export type SusuPayoutRule = 'rotating' | 'random' | 'trust_ordered'
+export type SusuPayoutRule = 'rotating' | 'random' | 'trust_ordered' | 'manual'
 export type PayoutRule = SusuPayoutRule | 'direct' // 'direct' = Medical → verified hospital
 /** Member's standing within a specific fund (distinct from per-cycle MemberStatus). */
 export type MemberFundStatus = 'active' | 'grace' | 'defaulted' | 'left' | 'completed'

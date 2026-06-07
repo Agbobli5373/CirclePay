@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, NotFoundException, Param, Post, UseGuards } from '@nestjs/common'
+import { Body, Controller, Delete, Get, NotFoundException, Param, Patch, Post, UseGuards } from '@nestjs/common'
 import {
   ApiTags,
   ApiCookieAuth,
@@ -15,7 +15,7 @@ import { JwtAuthGuard } from '../common/auth/jwt-auth.guard'
 import { CurrentUser } from '../common/auth/current-user.decorator'
 import type { AuthUser } from '../common/auth/auth-user'
 import { FundsService } from './funds.service'
-import { CreateFundDto, InviteMembersDto } from './dto/funds.dto'
+import { CreateFundDto, InviteMembersDto, SetMemberCountDto, ReorderPayoutDto } from './dto/funds.dto'
 import {
   FundSummaryDto,
   FundDetailDto,
@@ -101,6 +101,36 @@ export class FundsController {
   @ApiNotFoundResponse({ description: 'INVITE_INVALID — bad or expired invite link' })
   acceptInvite(@CurrentUser() user: AuthUser, @Param('token') token: string) {
     return this.funds.acceptInvite(user.id, token)
+  }
+
+  @Post(':id/start')
+  @ApiOperation({ summary: 'Start the Susu now with whoever has joined (organizer only)' })
+  @ApiOkResponse({ description: '{ ok: true }' })
+  @ApiForbiddenResponse({ description: 'NOT_ORGANIZER' })
+  @ApiConflictResponse({ description: 'ALREADY_STARTED / FUND_INACTIVE' })
+  @ApiBadRequestResponse({ description: 'TOO_FEW_MEMBERS — need at least 2 members' })
+  start(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.funds.startNow(user.id, id)
+  }
+
+  @Patch(':id/member-count')
+  @ApiOperation({ summary: 'Resize the circle before it starts (organizer only)' })
+  @ApiOkResponse({ description: '{ ok: true, memberCount }' })
+  @ApiForbiddenResponse({ description: 'NOT_ORGANIZER' })
+  @ApiConflictResponse({ description: 'ALREADY_STARTED — can only resize before start' })
+  @ApiBadRequestResponse({ description: "TOO_SMALL — below the members already in" })
+  setMemberCount(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: SetMemberCountDto) {
+    return this.funds.setMemberCount(user.id, id, dto.memberCount)
+  }
+
+  @Patch(':id/payout-order')
+  @ApiOperation({ summary: 'Arrange / reorder the payout order — strictly-future cycles during a run (organizer only)' })
+  @ApiOkResponse({ description: '{ ok: true }' })
+  @ApiForbiddenResponse({ description: 'NOT_ORGANIZER' })
+  @ApiConflictResponse({ description: 'LOCKED_POSITION — already-paid/current cycle frozen / FUND_INACTIVE' })
+  @ApiBadRequestResponse({ description: 'INVALID_ORDER — must list each current member once' })
+  arrangePayoutOrder(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ReorderPayoutDto) {
+    return this.funds.arrangePayoutOrder(user.id, id, dto.order)
   }
 
   @Post(':id/dev/expire')
