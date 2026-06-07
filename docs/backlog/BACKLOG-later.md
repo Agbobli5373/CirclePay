@@ -9,10 +9,10 @@ These are **outlined** now and expanded to full stories/specs when their milesto
 ## E7/E8 · Full Medical Payouts (escrow + receipt-gated tranches)
 **Goal:** The complete cash-aware model deferred from EM. **Ref:** `circlepay-domain/references/medical-payouts.md`.
 Candidate stories:
-- **E7-S1** `individual_cash` route: KYC'd next-of-kin payee + caps + organizer trust gating/guarantor.
-- **E7-S2** Escrow + tranche plan: `splitIntoTranches`; release first tranche on verification.
-- **E7-S3** Receipts: upload (`proforma`/`receipt`), ops verify; `canReleaseNextTranche` gate; `ReceiptSubmitted`/`TrancheReleased`.
-- **E7-S4** Refunds: cancel/lapse/flagged → reverse contributions to original payers (append-only); `MedicalFundRefunded`.
+- **E7-S1** `individual_cash` route — ✅ **built** (consolidation phase): organizer releases to a person's MoMo without the ops-verification gate (`payeeNetwork` chooses the channel). **Still later:** KYC'd next-of-kin payee + per-route caps + organizer trust gating / guarantor.
+- **E7-S2** Tranche release — ✅ **built** (consolidation phase): release the available delta any time (indexed `mp:{fundId}:{n}`), no auto-complete, explicit `Close`. **Still later:** a planned `splitIntoTranches` schedule and verification-triggered first tranche (today release is organizer-driven, not schedule-driven).
+- **E7-S3** Receipts: upload (`proforma`/`receipt`), ops verify; `canReleaseNextTranche` gate; `ReceiptSubmitted`/`TrancheReleased`. *(schema fields `requiresReceipts`/`firstTrancheCap`/`totalCap` already exist — feature not built.)*
+- **E7-S4** Refunds: cancel/lapse/flagged → reverse contributions to original payers (append-only); `MedicalFundRefunded`. *(also covers stuck `held` payout tranches → retry/refund.)*
 - **E7-S5** Verification anchors: social-welfare letter / referral / community voucher capture.
 
 ## E9 · Activity Feed & Notifications
