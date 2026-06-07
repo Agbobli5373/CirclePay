@@ -7,12 +7,14 @@ import {
   NotFoundException,
 } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
+import { Prisma } from '@prisma/client'
 import {
   canJoinFund,
   totalCycles,
   cyclePayoutAmount,
   cycleProgressPercent,
   resolvePayoutOrder,
+  validateReorder,
   type TrustStanding,
   type SusuPayoutRule,
 } from '@circlepay/shared'
@@ -24,6 +26,7 @@ import type {
   FundDetailDto,
   MemberDto,
   InviteResultDto,
+  MyInviteDto,
   JoinResultDto,
 } from './dto/funds-responses.dto'
 
@@ -78,10 +81,6 @@ export class FundsService {
 
   async createSusu(userId: string, dto: CreateFundDto): Promise<FundSummaryDto> {
     await this.assertCanJoin(userId)
-    if (dto.requiresDeposit) {
-      // Deposit collection + shortfall coverage are a later phase — don't let a member dead-end.
-      throw new BadRequestException({ code: 'DEPOSIT_NOT_SUPPORTED', message: 'Deposit-required Susu are coming soon' })
-    }
 
     const fund = await this.db.$transaction(async (tx) => {
       const created = await tx.fund.create({
@@ -122,25 +121,42 @@ export class FundsService {
 
   // ---------- invite ----------
 
-  async invite(userId: string, fundId: string, dto: InviteMembersDto): Promise<InviteResultDto> {
+  /** Load a fund and assert the caller is its admin. Returns the fund (incl. susu + creator name). */
+  private async assertFundAdmin(fundId: string, userId: string) {
     const fund = await this.db.fund.findUnique({
       where: { id: fundId },
       include: { susu: true, createdBy: { select: { name: true } } },
     })
     if (!fund || !fund.susu) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Fund not found' })
-
-    const requester = await this.db.member.findUnique({
-      where: { fundId_userId: { fundId, userId } },
-    })
+    const requester = await this.db.member.findUnique({ where: { fundId_userId: { fundId, userId } } })
     if (!requester || requester.role !== 'admin') {
-      throw new ForbiddenException({ code: 'FORBIDDEN', message: 'Only the fund admin can invite' })
+      throw new ForbiddenException({ code: 'FORBIDDEN', message: 'Only the fund admin can do this' })
     }
-    if (isSusuStarted(fund.susu)) {
+    return fund
+  }
+
+  private joinUrl(token: string): string {
+    const base = this.config.get<string>('APP_BASE_URL') ?? 'http://localhost:3000'
+    return `${base}/join/${token}`
+  }
+
+  private inviteMessage(inviterName: string, fundName: string, token: string): string {
+    return `${inviterName} invited you to the "${fundName}" CirclePay Susu. Join: ${this.joinUrl(token)} — or dial *203#.`
+  }
+
+  async invite(userId: string, fundId: string, dto: InviteMembersDto): Promise<InviteResultDto> {
+    const fund = await this.assertFundAdmin(fundId, userId)
+    if (isSusuStarted(fund.susu!)) {
       throw new ForbiddenException({ code: 'FORBIDDEN', message: 'The Susu has already started' })
     }
 
+    // A seat is occupied by an active member OR a pending invite (one invite per seat).
     const activeCount = await this.db.member.count({ where: { fundId, fundStatus: 'active' } })
-    const remaining = fund.susu.memberCount - activeCount
+    const pending = await this.db.invite.findMany({
+      where: { fundId, status: 'pending' },
+      select: { phone: true },
+    })
+    const remaining = fund.susu!.memberCount - activeCount - pending.length
 
     const unique = [...new Set(dto.phones)]
     const alreadyMembers = await this.db.user.findMany({
@@ -150,27 +166,25 @@ export class FundsService {
     const memberPhones = new Set(alreadyMembers.map((u) => u.phone))
     const candidates = unique.filter((p) => !memberPhones.has(p))
 
-    if (candidates.length > remaining) {
+    // Re-inviting an already-pending number is a reminder (handled via resend), not a new seat.
+    const pendingPhones = new Set(pending.map((i) => i.phone))
+    const newSeats = candidates.filter((p) => !pendingPhones.has(p))
+    if (newSeats.length > remaining) {
       throw new BadRequestException({
         code: 'SEATS_EXCEEDED',
         message: `Only ${Math.max(0, remaining)} seat(s) remaining`,
       })
     }
 
-    const base = this.config.get<string>('APP_BASE_URL') ?? 'http://localhost:3000'
     const inviterName = fund.createdBy?.name ?? 'A friend'
-
     for (const phone of candidates) {
       const invite = await this.db.invite.upsert({
         where: { fundId_phone: { fundId, phone } },
         create: { fundId, phone },
         update: { status: 'pending' },
       })
-      const message =
-        `${inviterName} invited you to the "${fund.name}" CirclePay Susu. ` +
-        `Join: ${base}/join/${invite.token} — or dial *203#.`
       try {
-        await this.notifications.sendSms(phone, message, `invite:${fundId}`)
+        await this.notifications.sendSms(phone, this.inviteMessage(inviterName, fund.name, invite.token), `invite:${fundId}`)
       } catch (err) {
         // Sandbox/no-credential environments: don't fail the invite if SMS can't send.
         this.logger.warn(`Invite SMS failed for a recipient: ${(err as Error).message}`)
@@ -178,6 +192,111 @@ export class FundsService {
     }
 
     return { invited: candidates.length }
+  }
+
+  /** Admin: list this fund's invites (with shareable join URLs + status). */
+  async listInvites(userId: string, fundId: string) {
+    await this.assertFundAdmin(fundId, userId)
+    const invites = await this.db.invite.findMany({ where: { fundId }, orderBy: { createdAt: 'desc' } })
+    return invites.map((i) => ({
+      id: i.id,
+      phone: i.phone,
+      status: i.status,
+      joinUrl: this.joinUrl(i.token),
+      createdAt: i.createdAt,
+    }))
+  }
+
+  /** Admin: re-send a pending invite's SMS (reminder/nudge). */
+  async resendInvite(userId: string, fundId: string, inviteId: string): Promise<{ ok: true }> {
+    const fund = await this.assertFundAdmin(fundId, userId)
+    if (isSusuStarted(fund.susu!)) {
+      throw new ForbiddenException({ code: 'FORBIDDEN', message: 'The Susu has already started' })
+    }
+    const invite = await this.db.invite.findUnique({ where: { id: inviteId } })
+    if (!invite || invite.fundId !== fundId) {
+      throw new NotFoundException({ code: 'INVITE_NOT_FOUND', message: 'Invite not found' })
+    }
+    if (invite.status !== 'pending') {
+      throw new BadRequestException({ code: 'INVITE_NOT_PENDING', message: 'This invite is not pending' })
+    }
+    const inviterName = fund.createdBy?.name ?? 'A friend'
+    try {
+      await this.notifications.sendSms(invite.phone, this.inviteMessage(inviterName, fund.name, invite.token), `invite:${fundId}`)
+    } catch (err) {
+      this.logger.warn(`Invite resend SMS failed: ${(err as Error).message}`)
+    }
+    return { ok: true }
+  }
+
+  /** Admin: revoke (expire) an invite, freeing the seat. */
+  async revokeInvite(userId: string, fundId: string, inviteId: string): Promise<{ ok: true }> {
+    await this.assertFundAdmin(fundId, userId)
+    const invite = await this.db.invite.findUnique({ where: { id: inviteId } })
+    if (!invite || invite.fundId !== fundId) {
+      throw new NotFoundException({ code: 'INVITE_NOT_FOUND', message: 'Invite not found' })
+    }
+    await this.db.invite.update({ where: { id: inviteId }, data: { status: 'expired' } })
+    return { ok: true }
+  }
+
+  // ---------- incoming invites (invitee side) ----------
+
+  /** Invitee inbox: pending invites addressed to the current user's MoMo number. */
+  async myInvites(userId: string): Promise<MyInviteDto[]> {
+    const user = await this.db.user.findUnique({ where: { id: userId } })
+    if (!user) throw new NotFoundException({ code: 'NOT_FOUND', message: 'User not found' })
+
+    const invites = await this.db.invite.findMany({
+      where: { phone: user.phone, status: 'pending' },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        fund: {
+          include: {
+            susu: true,
+            createdBy: { select: { name: true } },
+            members: { where: { fundStatus: 'active' }, select: { userId: true } },
+          },
+        },
+      },
+    })
+
+    const rows: MyInviteDto[] = []
+    for (const inv of invites) {
+      const fund = inv.fund
+      // Skip invites that can no longer be accepted, or that I've already joined.
+      if (!fund.susu || fund.status !== 'active' || isSusuStarted(fund.susu)) continue
+      if (fund.members.some((m) => m.userId === userId)) continue
+      rows.push({
+        id: inv.id,
+        token: inv.token,
+        fundId: fund.id,
+        fundName: fund.name,
+        contribution: fund.susu.contribution,
+        frequency: fund.susu.frequency,
+        memberCount: fund.susu.memberCount,
+        seatsLeft: Math.max(0, fund.susu.memberCount - fund.members.length),
+        payoutRule: fund.susu.payoutRule,
+        inviterName: fund.createdBy?.name ?? 'A friend',
+        createdAt: inv.createdAt,
+      })
+    }
+    return rows
+  }
+
+  /** Invitee: decline an invite addressed to me. Frees the seat; the admin sees it as 'declined'. */
+  async declineInvite(userId: string, inviteId: string): Promise<{ ok: true }> {
+    const user = await this.db.user.findUnique({ where: { id: userId } })
+    if (!user) throw new NotFoundException({ code: 'NOT_FOUND', message: 'User not found' })
+    const invite = await this.db.invite.findUnique({ where: { id: inviteId } })
+    if (!invite) throw new NotFoundException({ code: 'INVITE_NOT_FOUND', message: 'Invite not found' })
+    if (invite.phone !== user.phone) {
+      throw new ForbiddenException({ code: 'INVITE_PHONE_MISMATCH', message: 'This invite was sent to a different MoMo number' })
+    }
+    if (invite.status === 'pending') {
+      await this.db.invite.update({ where: { id: inviteId }, data: { status: 'declined' } })
+    }
+    return { ok: true } // idempotent for already-resolved invites
   }
 
   // ---------- join ----------
@@ -229,30 +348,9 @@ export class FundsService {
         data: { status: 'accepted' },
       })
 
-      // Fund just filled → start the Susu: lock members + payout order (incl. random shuffle).
+      // Fund just filled → start the Susu (lock members + payout order).
       if (activeCount + 1 >= fund.susu.memberCount) {
-        const members = await tx.member.findMany({
-          where: { fundId, fundStatus: 'active' },
-          include: { user: { include: { trustScore: true } } },
-        })
-        const order = resolvePayoutOrder(
-          members.map((m) => ({
-            userId: m.userId,
-            standing: toSharedStanding(m.user.trustScore?.standing),
-            joinedAt: m.joinedAt,
-          })),
-          fund.susu.payoutRule as SusuPayoutRule,
-          fundId, // seed → deterministic 'random' order
-        )
-        await tx.susuDetail.update({
-          where: { fundId },
-          data: { startedAt: new Date(), payoutOrder: order },
-        })
-        // Set the cycle-1 contribution due date for every member (cadence-driven).
-        await tx.member.updateMany({
-          where: { fundId, fundStatus: 'active' },
-          data: { dueAt: new Date(Date.now() + cycleIntervalMs(fund.susu.frequency)) },
-        })
+        await this.startSusu(tx, fundId, fund.susu)
       }
 
       if (requiresDeposit) {
@@ -283,10 +381,92 @@ export class FundsService {
     const existing = await this.db.member.findUnique({
       where: { fundId_userId: { fundId: invite.fundId, userId } },
     })
-    if (existing) return { status: 'active', fundId: invite.fundId } // idempotent
+    if (existing) {
+      if (invite.status !== 'accepted') {
+        await this.db.invite.update({ where: { id: invite.id }, data: { status: 'accepted' } })
+      }
+      return { status: 'active', fundId: invite.fundId } // idempotent
+    }
 
     const result = await this.join(userId, invite.fundId)
+    await this.db.invite.update({ where: { id: invite.id }, data: { status: 'accepted' } })
     return { ...result, fundId: invite.fundId }
+  }
+
+  // ---------- organizer controls (start / resize / arrange) ----------
+
+  /** Start the Susu now with whoever has joined — organizer-only, before it auto-fills. */
+  async startNow(userId: string, fundId: string): Promise<{ ok: true }> {
+    return this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Fund" WHERE id = ${fundId} FOR UPDATE`
+      const fund = await tx.fund.findUnique({ where: { id: fundId }, include: { susu: true } })
+      if (!fund || !fund.susu) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Fund not found' })
+      if (fund.createdById !== userId) throw new ForbiddenException({ code: 'NOT_ORGANIZER', message: 'Only the organizer can start this Susu' })
+      if (fund.status !== 'active') throw new ConflictException({ code: 'FUND_INACTIVE', message: 'This fund is not open' })
+      if (isSusuStarted(fund.susu)) throw new ConflictException({ code: 'ALREADY_STARTED', message: 'This Susu has already started' })
+      const activeCount = await tx.member.count({ where: { fundId, fundStatus: 'active' } })
+      if (activeCount < 2) throw new BadRequestException({ code: 'TOO_FEW_MEMBERS', message: 'At least 2 members must join before starting' })
+      // Start with who's in: shrink the circle to the joined count.
+      await tx.susuDetail.update({ where: { fundId }, data: { memberCount: activeCount, totalCycles: activeCount } })
+      await this.startSusu(tx, fundId, fund.susu)
+      return { ok: true }
+    })
+  }
+
+  /** Increase / decrease the member count before the Susu starts — organizer-only. */
+  async setMemberCount(userId: string, fundId: string, memberCount: number): Promise<{ ok: true; memberCount: number }> {
+    return this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Fund" WHERE id = ${fundId} FOR UPDATE`
+      const fund = await tx.fund.findUnique({ where: { id: fundId }, include: { susu: true } })
+      if (!fund || !fund.susu) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Fund not found' })
+      if (fund.createdById !== userId) throw new ForbiddenException({ code: 'NOT_ORGANIZER', message: 'Only the organizer can resize this Susu' })
+      if (isSusuStarted(fund.susu)) throw new ConflictException({ code: 'ALREADY_STARTED', message: 'You can only resize before the Susu starts' })
+      const activeCount = await tx.member.count({ where: { fundId, fundStatus: 'active' } })
+      const floor = Math.max(2, activeCount)
+      if (memberCount < floor) {
+        throw new BadRequestException({ code: 'TOO_SMALL', message: `Can't go below the ${activeCount} member${activeCount === 1 ? '' : 's'} already in` })
+      }
+      await tx.susuDetail.update({ where: { fundId }, data: { memberCount, totalCycles: memberCount } })
+      return { ok: true, memberCount }
+    })
+  }
+
+  /**
+   * Arrange the payout order before start, or reorder strictly-future cycles during the run
+   * (already-paid + the current cycle are frozen). Organizer-only; moved members are notified.
+   */
+  async arrangePayoutOrder(userId: string, fundId: string, order: string[]): Promise<{ ok: true }> {
+    const { started, oldOrder, fundName } = await this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Fund" WHERE id = ${fundId} FOR UPDATE`
+      const fund = await tx.fund.findUnique({
+        where: { id: fundId },
+        include: { susu: true, members: { where: { fundStatus: 'active' } } },
+      })
+      if (!fund || !fund.susu) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Fund not found' })
+      if (fund.createdById !== userId) throw new ForbiddenException({ code: 'NOT_ORGANIZER', message: 'Only the organizer can arrange the payout order' })
+      if (fund.status !== 'active') throw new ConflictException({ code: 'FUND_INACTIVE', message: 'This fund is not open' })
+
+      const isStarted = isSusuStarted(fund.susu)
+      const current =
+        isStarted && Array.isArray(fund.susu.payoutOrder)
+          ? (fund.susu.payoutOrder as string[])
+          : fund.members.map((m) => m.userId)
+      const lockedCount = isStarted ? fund.susu.currentCycle : 0
+      const err = validateReorder(current, order, lockedCount)
+      if (err === 'LOCKED_CHANGED') {
+        throw new ConflictException({ code: 'LOCKED_POSITION', message: "A member who's already been paid (or the current cycle) can't be moved" })
+      }
+      if (err) {
+        throw new BadRequestException({ code: 'INVALID_ORDER', message: 'The order must list each current member exactly once' })
+      }
+      await tx.susuDetail.update({
+        where: { fundId },
+        data: isStarted ? { payoutOrder: order } : { payoutOrder: order, payoutRule: 'manual' },
+      })
+      return { started: isStarted, oldOrder: current, fundName: fund.name }
+    })
+    if (started) await this.notifyReorder(fundId, oldOrder, order, fundName)
+    return { ok: true }
   }
 
   /** DEV ONLY: backdate the caller's current-cycle due date to trigger overdue/default in a demo. */
@@ -316,7 +496,7 @@ export class FundsService {
       include: this.fundInclude,
       orderBy: { createdAt: 'desc' },
     })
-    return funds.filter((f) => f.susu).map((f) => this.toSummary(f, userId))
+    return funds.filter((f) => f.susu).map((f) => ({ ...this.toSummary(f, userId), createdAt: f.createdAt }))
   }
 
   async detail(userId: string, fundId: string): Promise<FundDetailDto> {
@@ -346,6 +526,7 @@ export class FundsService {
     const payout = await this.db.payout.findUnique({
       where: { externalref: `p:${fundId}:${fund.susu.currentCycle}` },
     })
+    const pendingInviteCount = await this.db.invite.count({ where: { fundId, status: 'pending' } })
 
     return {
       ...this.toSummary(fund, userId),
@@ -356,6 +537,10 @@ export class FundsService {
       started: isSusuStarted(fund.susu),
       currentPayeeUserId,
       currentCyclePayoutStatus: payout?.status ?? 'none',
+      pendingInviteCount,
+      openSeats: Math.max(0, fund.susu.memberCount - fund.members.length - pendingInviteCount),
+      requiresDeposit: fund.susu.requiresDeposit,
+      depositAmount: fund.susu.depositAmount,
     }
   }
 
@@ -370,6 +555,72 @@ export class FundsService {
     const trust = await this.db.trustScore.findUnique({ where: { userId } })
     if (!canJoinFund({ standing: toSharedStanding(trust?.standing) })) {
       throw new ForbiddenException({ code: 'TRUST_LOCKED', message: 'Your account is locked from joining funds' })
+    }
+  }
+
+  /**
+   * Lock a Susu's start: resolve + persist the payout order (manual preset → trust → seeded
+   * random → join order), set startedAt, and set every active member's cycle-1 due date.
+   * Shared by the auto-fill path in join() and the organizer's manual startNow().
+   */
+  private async startSusu(
+    tx: Prisma.TransactionClient,
+    fundId: string,
+    susu: { payoutRule: string; frequency: string; payoutOrder: unknown },
+  ): Promise<void> {
+    const members = await tx.member.findMany({
+      where: { fundId, fundStatus: 'active' },
+      include: { user: { include: { trustScore: true } } },
+    })
+    const preset = Array.isArray(susu.payoutOrder) ? (susu.payoutOrder as string[]) : undefined
+    const order = resolvePayoutOrder(
+      members.map((m) => ({
+        userId: m.userId,
+        standing: toSharedStanding(m.user.trustScore?.standing),
+        joinedAt: m.joinedAt,
+      })),
+      susu.payoutRule as SusuPayoutRule,
+      fundId, // seed → deterministic 'random' order
+      preset, // organizer's arrangement → 'manual'
+    )
+    await tx.susuDetail.update({ where: { fundId }, data: { startedAt: new Date(), payoutOrder: order } })
+    await tx.member.updateMany({
+      where: { fundId, fundStatus: 'active' },
+      data: { dueAt: new Date(Date.now() + cycleIntervalMs(susu.frequency)) },
+    })
+  }
+
+  /** Tell members whose cycle moved that the order changed (best-effort; never blocks the reorder). */
+  private async notifyReorder(fundId: string, oldOrder: string[], newOrder: string[], fundName: string): Promise<void> {
+    const changed = newOrder
+      .map((uid, i) => ({ uid, cycle: i + 1 }))
+      .filter((x) => oldOrder[x.cycle - 1] !== x.uid)
+    if (!changed.length) return
+    const users = await this.db.user.findMany({ where: { id: { in: changed.map((c) => c.uid) } } })
+    const byId = new Map(users.map((u) => [u.id, u]))
+    for (const c of changed) {
+      const u = byId.get(c.uid)
+      if (!u) continue
+      await this.db.activityItem
+        .create({
+          data: {
+            userId: c.uid,
+            type: 'joined',
+            title: 'Payout order updated',
+            detail: `${fundName}: your turn is now cycle ${c.cycle}`,
+            reference: fundId,
+          },
+        })
+        .catch(() => undefined)
+      try {
+        await this.notifications.sendSms(
+          u.phone,
+          `CirclePay: the payout order for ${fundName} changed — your turn is now cycle ${c.cycle}.`,
+          `reorder:${fundId}`,
+        )
+      } catch {
+        /* SMS is best-effort */
+      }
     }
   }
 

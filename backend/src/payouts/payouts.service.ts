@@ -177,10 +177,12 @@ export class PayoutsService implements OnModuleInit {
         const susu = await tx.susuDetail.findUnique({ where: { fundId: payout.fundId } })
         if (!susu) return false
         if (payout.cycle! < susu.totalCycles) {
-          // Advance to the next cycle; reset members for the new round.
+          // Advance to the next cycle; reset EVERY in-rotation member for the new round —
+          // including defaulted members, so a deposit-covered defaulter doesn't carry a stale
+          // status='paid' into later cycles (which would over-count the funded check and over-pay).
           await tx.susuDetail.update({ where: { fundId: payout.fundId }, data: { currentCycle: payout.cycle! + 1 } })
           await tx.member.updateMany({
-            where: { fundId: payout.fundId, fundStatus: 'active' },
+            where: { fundId: payout.fundId, fundStatus: { in: ['active', 'grace', 'defaulted'] } },
             data: { status: 'pending', paidAt: null },
           })
           return false

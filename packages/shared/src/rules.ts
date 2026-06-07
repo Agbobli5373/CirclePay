@@ -116,18 +116,49 @@ function seededShuffle<T>(items: T[], seed: string): T[] {
  * - `trust_ordered` → safest-first (orderPayoutsByTrust)
  * - `random`        → deterministic seeded shuffle when `seed` is given (locked in at start);
  *                     without a seed, falls back to join order (provisional display).
+ * - `manual`        → the organizer's `preset` order, filtered to current members; any member
+ *                     not in the preset (e.g. a late joiner) is appended in join order.
  */
 export function resolvePayoutOrder(
   members: { userId: string; standing: TrustStanding; joinedAt: Date | string | number }[],
   rule: SusuPayoutRule,
   seed?: string,
+  preset?: string[],
 ): string[] {
   const byJoin = [...members].sort(
     (a, b) => new Date(a.joinedAt).getTime() - new Date(b.joinedAt).getTime(),
   )
+  if (rule === 'manual' && preset?.length) {
+    const present = new Set(byJoin.map((m) => m.userId))
+    const ordered = preset.filter((id) => present.has(id))
+    const seen = new Set(ordered)
+    const rest = byJoin.map((m) => m.userId).filter((id) => !seen.has(id))
+    return [...ordered, ...rest]
+  }
   if (rule === 'trust_ordered') return orderPayoutsByTrust(byJoin).map((m) => m.userId)
   if (rule === 'random' && seed) return seededShuffle(byJoin, seed).map((m) => m.userId)
   return byJoin.map((m) => m.userId)
+}
+
+/**
+ * Validate a payout-order reorder. `next` must be a permutation of `current`, and the first
+ * `lockedCount` entries (already-paid / in-flight cycles) must be unchanged. Returns an error
+ * code when invalid, or null when the reorder is allowed.
+ *   lockedCount = startedAt ? currentCycle : 0  (strictly-future scope freezes cycles 1..current)
+ */
+export function validateReorder(
+  current: string[],
+  next: string[],
+  lockedCount: number,
+): 'LENGTH' | 'NOT_PERMUTATION' | 'LOCKED_CHANGED' | null {
+  if (next.length !== current.length) return 'LENGTH'
+  const cs = [...current].sort()
+  const ns = [...next].sort()
+  if (cs.some((v, i) => v !== ns[i])) return 'NOT_PERMUTATION'
+  for (let i = 0; i < Math.min(Math.max(0, lockedCount), current.length); i++) {
+    if (next[i] !== current[i]) return 'LOCKED_CHANGED'
+  }
+  return null
 }
 
 // ---------- Money formatting ----------
@@ -220,6 +251,57 @@ export function payoutPostings(input: {
     if (!input.moolreFeeAccountId) throw new Error('moolreFeeAccountId required when moolreFee > 0')
     postings.push({ accountId: input.moolreFeeAccountId, amount: moolreFee })
   }
+  assertBalanced(postings)
+  return postings
+}
+
+/**
+ * Balanced postings for a settled member deposit (the safety buffer collected on join).
+ * Cash lands in the Moolre float; the member's `deposit` account holds it as a liability
+ * (negative balance = we owe it back), mirroring how the pot holds contributions.
+ */
+export function depositPostings(input: {
+  moolreFloatAccountId: string
+  depositAccountId: string
+  amount: Pesewas
+  moolreFee?: Pesewas
+  moolreFeeAccountId?: string
+}): Posting[] {
+  const moolreFee = input.moolreFee ?? 0
+  const postings: Posting[] = [
+    { accountId: input.moolreFloatAccountId, amount: input.amount - moolreFee },
+    { accountId: input.depositAccountId, amount: -input.amount },
+  ]
+  if (moolreFee > 0) {
+    if (!input.moolreFeeAccountId) throw new Error('moolreFeeAccountId required when moolreFee > 0')
+    postings.push({ accountId: input.moolreFeeAccountId, amount: moolreFee })
+  }
+  assertBalanced(postings)
+  return postings
+}
+
+/**
+ * Balanced postings that cover a cycle shortfall when a member defaults: draw from the
+ * defaulter's held `deposit` first, then the `safety_pool`, into the fund pot — so the
+ * cycle's payee is still paid in full. Consuming a holding moves it toward zero (+used),
+ * and the pot fills (−used), exactly as if the member had contributed.
+ * Order/availability is decided by the caller (deposit before pool); pass only what's used.
+ */
+export function shortfallPostings(input: {
+  fundPotAccountId: string
+  depositAccountId: string
+  depositUsed: Pesewas
+  safetyPoolAccountId?: string
+  poolUsed?: Pesewas
+}): Posting[] {
+  const poolUsed = input.poolUsed ?? 0
+  const postings: Posting[] = []
+  if (input.depositUsed > 0) postings.push({ accountId: input.depositAccountId, amount: input.depositUsed })
+  if (poolUsed > 0) {
+    if (!input.safetyPoolAccountId) throw new Error('safetyPoolAccountId required when poolUsed > 0')
+    postings.push({ accountId: input.safetyPoolAccountId, amount: poolUsed })
+  }
+  postings.push({ accountId: input.fundPotAccountId, amount: -(input.depositUsed + poolUsed) })
   assertBalanced(postings)
   return postings
 }

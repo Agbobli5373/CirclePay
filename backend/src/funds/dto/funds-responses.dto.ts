@@ -100,12 +100,78 @@ export class FundDetailDto extends FundSummaryDto {
     description: "Payout status for the current cycle (p:{fundId}:{currentCycle}).",
   })
   currentCyclePayoutStatus!: string
+
+  @ApiProperty({ example: 1, description: 'Pending invites not yet accepted (awaiting members).' })
+  pendingInviteCount!: number
+
+  @ApiProperty({ example: 1, description: 'Seats free to invite into = memberCount − members − pendingInvites.' })
+  openSeats!: number
+
+  @ApiProperty({ example: false, description: 'Whether members must pay a security deposit on joining.' })
+  requiresDeposit!: boolean
+
+  @ApiProperty({ example: 0, description: 'Security deposit per member, pesewas (0 when not required).' })
+  depositAmount!: number
 }
 
 /** Result of inviting members. */
 export class InviteResultDto {
   @ApiProperty({ example: 2, description: 'How many invites were created + SMS attempted.' })
   invited!: number
+}
+
+/** A single invite row (admin invite manager). */
+export class InviteDto {
+  @ApiProperty({ example: 'cmsinviteid' })
+  id!: string
+
+  @ApiProperty({ example: '+233240000002' })
+  phone!: string
+
+  @ApiProperty({ example: 'pending', enum: ['pending', 'accepted', 'expired', 'declined'] })
+  status!: string
+
+  @ApiProperty({ example: 'http://localhost:3000/join/abc123', description: 'Shareable join link for this invitee.' })
+  joinUrl!: string
+
+  @ApiProperty({ example: '2026-06-04T14:00:00.000Z' })
+  createdAt!: Date
+}
+
+/** An invite addressed to the current user — shown in their in-app "Invitations" inbox. */
+export class MyInviteDto {
+  @ApiProperty({ example: 'cmsinviteid' })
+  id!: string
+
+  @ApiProperty({ example: 'abc123', description: 'Accept by POST /funds/join/:token.' })
+  token!: string
+
+  @ApiProperty({ example: 'cmsfundid' })
+  fundId!: string
+
+  @ApiProperty({ example: 'Kumasi Traders Circle' })
+  fundName!: string
+
+  @ApiProperty({ example: 50000, description: 'Per-cycle contribution, pesewas.' })
+  contribution!: number
+
+  @ApiProperty({ example: 'monthly', enum: ['weekly', 'monthly'] })
+  frequency!: string
+
+  @ApiProperty({ example: 6 })
+  memberCount!: number
+
+  @ApiProperty({ example: 2, description: 'Open seats remaining before the Susu starts.' })
+  seatsLeft!: number
+
+  @ApiProperty({ example: 'rotating', enum: ['rotating', 'random', 'trust_ordered'] })
+  payoutRule!: string
+
+  @ApiProperty({ example: 'Ama Asante', description: 'Who created the circle / invited you.' })
+  inviterName!: string
+
+  @ApiProperty({ example: '2026-06-04T14:00:00.000Z' })
+  createdAt!: Date
 }
 
 /** Result of joining a fund. */

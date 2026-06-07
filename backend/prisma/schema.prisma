@@ -33,6 +33,7 @@ enum SusuPayoutRule {
   rotating
   random
   trust_ordered
+  manual
 }
 
 enum MemberFundStatus {
@@ -87,6 +88,13 @@ enum InviteStatus {
   pending
   accepted
   expired
+  declined
+}
+
+enum DonationStatus {
+  initiated
+  settled
+  failed
 }
 
 enum MedicalPayoutRoute {
@@ -165,6 +173,7 @@ model Fund {
   payouts     Payout[]
   contributors Contributor[]
   invites     Invite[]
+  fundraiserInvites FundraiserInvite[]
 }
 
 model SusuDetail {
@@ -200,6 +209,7 @@ model FundraiserDetail {
   payeeName       String?
   payeeMomo       String?
   payeeBank       String?
+  payeeNetwork    Network?           // momo / individual route: which MoMo network the payee uses
   payeeRelation   String?            // individual_cash: relation to patient
   verificationStatus PayeeVerificationStatus @default(unverified)
   requiresReceipts Boolean           @default(false)
@@ -323,14 +333,40 @@ model Payout {
 }
 
 model Contributor {
-  id          String   @id @default(cuid())
+  id          String         @id @default(cuid())
   fundId      String
-  fund        Fund     @relation(fields: [fundId], references: [id], onDelete: Cascade)
-  displayName String   // "Anonymous" when anonymous
-  amount      Int      // pesewas
-  anonymous   Boolean  @default(false)
+  fund        Fund           @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  displayName String         // "Anonymous" when anonymous
+  amount      Int            // pesewas
+  anonymous   Boolean        @default(false)
   userId      String?
-  ts          DateTime @default(now())
+  // Donation transaction tracking (collect → settle). Only `settled` rows count toward `raised`.
+  externalref String?        @unique // mc:{fundId}:{donationId}
+  status      DonationStatus @default(initiated)
+  phone       String?        // payer MoMo (for the collect + receipt)
+  network     String?        // MTN | Telecel | AirtelTigo
+  thankedAt   DateTime?      // set once the organizer has sent a thank-you SMS (de-dupe)
+  ts          DateTime       @default(now())
+
+  @@index([fundId, status])
+}
+
+/**
+ * Someone the organizer invited to contribute to a medical fundraiser (family/friends).
+ * Lighter than the Susu `Invite` — no token/accept/join; the invitee just donates via the
+ * public link. "Contributed" is derived by matching a settled Contributor.phone to this phone.
+ */
+model FundraiserInvite {
+  id             String    @id @default(cuid())
+  fundId         String
+  fund           Fund      @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  phone          String
+  invitedByName  String?
+  lastRemindedAt DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@unique([fundId, phone])
+  @@index([fundId])
 }
 
 model TrustScore {

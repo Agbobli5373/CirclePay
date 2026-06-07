@@ -1,7 +1,7 @@
 'use client'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, type CreateSusuPayload } from './api'
+import { api, type CreateSusuPayload, type CreateMedicalPayload } from './api'
 
 export const qk = {
   me: ['me'] as const,
@@ -38,12 +38,156 @@ export function useAcceptInvite() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (token: string) => api.funds.acceptInvite(token),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['funds'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['funds'] })
+      qc.invalidateQueries({ queryKey: ['my-invites'] })
+    },
+  })
+}
+
+/** Pending invites addressed to me (dashboard + funds "Invitations" inbox). */
+export function useMyInvites() {
+  return useQuery({ queryKey: ['my-invites'], queryFn: api.funds.myInvites })
+}
+
+export function useDeclineInvite() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (inviteId: string) => api.funds.declineInvite(inviteId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['my-invites'] }),
   })
 }
 
 export function useInvite(fundId: string) {
-  return useMutation({ mutationFn: (phones: string[]) => api.funds.invite(fundId, phones) })
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (phones: string[]) => api.funds.invite(fundId, phones),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['fund-invites', fundId] })
+      qc.invalidateQueries({ queryKey: qk.fund(fundId) })
+    },
+  })
+}
+
+export function useFundInvites(fundId: string, enabled = true) {
+  return useQuery({ queryKey: ['fund-invites', fundId], queryFn: () => api.funds.invites(fundId), enabled: !!fundId && enabled })
+}
+
+export function useResendInvite(fundId: string) {
+  return useMutation({ mutationFn: (inviteId: string) => api.funds.resendInvite(fundId, inviteId) })
+}
+
+export function useStartFund(fundId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.funds.start(fundId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.fund(fundId) }),
+  })
+}
+
+export function useSetMemberCount(fundId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (memberCount: number) => api.funds.setMemberCount(fundId, memberCount),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.fund(fundId) }),
+  })
+}
+
+export function useArrangePayoutOrder(fundId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (order: string[]) => api.funds.arrangePayoutOrder(fundId, order),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.fund(fundId) }),
+  })
+}
+
+export function useRevokeInvite(fundId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (inviteId: string) => api.funds.revokeInvite(fundId, inviteId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['fund-invites', fundId] })
+      qc.invalidateQueries({ queryKey: qk.fund(fundId) })
+    },
+  })
+}
+
+// ----- Medical fundraising (EM) -----
+
+export function useCreateMedical() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: CreateMedicalPayload) => api.fundraisers.create(body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['my-fundraisers'] }),
+  })
+}
+
+export function useFundraiser(id: string) {
+  return useQuery({ queryKey: ['fundraiser', id], queryFn: () => api.fundraisers.detail(id), enabled: !!id })
+}
+
+export function useMyFundraisers() {
+  return useQuery({ queryKey: ['my-fundraisers'], queryFn: api.fundraisers.mine })
+}
+
+export function usePublicFundraiser(slug: string) {
+  return useQuery({ queryKey: ['public-fundraiser', slug], queryFn: () => api.public.fundraiser(slug), enabled: !!slug })
+}
+
+export function useVerifyPayee(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (decision: 'verified' | 'rejected') => api.fundraisers.verifyPayee(id, decision),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['fundraiser', id] }),
+  })
+}
+
+export function useReleasePayout(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.fundraisers.release(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['fundraiser', id] }),
+  })
+}
+
+export function useCloseFundraiser(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.fundraisers.close(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['fundraiser', id] }),
+  })
+}
+
+export function useFundraiserInvites(id: string) {
+  return useQuery({ queryKey: ['fundraiser-invites', id], queryFn: () => api.fundraisers.invites(id), enabled: !!id })
+}
+
+export function useInviteContributors(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (phones: string[]) => api.fundraisers.invite(id, phones),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['fundraiser-invites', id] }),
+  })
+}
+
+export function useRemindContributor(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (inviteId: string) => api.fundraisers.remindInvite(id, inviteId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['fundraiser-invites', id] }),
+  })
+}
+
+export function useCancelContributorInvite(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (inviteId: string) => api.fundraisers.cancelInvite(id, inviteId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['fundraiser-invites', id] }),
+  })
+}
+
+export function useThankContributors(id: string) {
+  return useMutation({ mutationFn: (note?: string) => api.fundraisers.thank(id, note) })
 }
 
 export function useUpdateProfile() {
@@ -51,6 +195,21 @@ export function useUpdateProfile() {
   return useMutation({
     mutationFn: (name: string) => api.auth.updateMe(name),
     onSuccess: (me) => qc.setQueryData(qk.me, me),
+  })
+}
+
+export function useChangePin() {
+  return useMutation({
+    mutationFn: ({ currentPin, newPin, confirmPin }: { currentPin: string; newPin: string; confirmPin: string }) =>
+      api.auth.changePin(currentPin, newPin, confirmPin),
+  })
+}
+
+export function useLogin() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ phone, pin }: { phone: string; pin: string }) => api.auth.login(phone, pin),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.me }),
   })
 }
 

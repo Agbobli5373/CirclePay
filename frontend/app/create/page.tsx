@@ -7,12 +7,12 @@ import { toast } from 'sonner'
 import { AppShell } from '@/components/app-shell'
 import { Users, Heart, Sparkles, CheckCircle2, BadgeCheck, Share2, UserPlus, ArrowRight, ArrowLeft, Plus, X, Copy, Check, MessageCircle, Loader2 } from 'lucide-react'
 import { toPesewas } from '@circlepay/shared'
-import { useCreateFund, useInvite } from '@/lib/queries'
-import { ApiError } from '@/lib/api'
+import { useCreateFund, useInvite, useCreateMedical } from '@/lib/queries'
+import { ApiError, type Network } from '@/lib/api'
 
 type FundType = 'Susu' | 'Medical'
 type Frequency = 'Weekly' | 'Monthly'
-type Payout = 'Rotating order' | 'Random draw'
+type Payout = 'Rotating order' | 'Random draw' | 'Arrange myself'
 
 function nextMonthValue() {
   const d = new Date()
@@ -30,6 +30,8 @@ export default function CreateFundPage() {
   const [members, setMembers] = useState('')
   const [startMonth, setStartMonth] = useState(nextMonthValue())
   const [payout, setPayout] = useState<Payout>('Rotating order')
+  const [requiresDeposit, setRequiresDeposit] = useState(false)
+  const [depositAmount, setDepositAmount] = useState('')
 
   // Medical
   const [goal, setGoal] = useState('')
@@ -38,11 +40,18 @@ export default function CreateFundPage() {
   const [story, setStory] = useState('')
   const [deadline, setDeadline] = useState('')
   const [shareable, setShareable] = useState(true)
+  const [payoutRoute, setPayoutRoute] = useState<'hospital_momo' | 'hospital_bank' | 'individual_cash'>('hospital_bank')
+  const [payeeName, setPayeeName] = useState('')
+  const [payeeMomo, setPayeeMomo] = useState('')
+  const [payeeNetwork, setPayeeNetwork] = useState<Network>('MTN')
+  const [payeeBank, setPayeeBank] = useState('')
 
   const [submitted, setSubmitted] = useState(false)
   const [createdFundId, setCreatedFundId] = useState<string | null>(null)
+  const [createdSlug, setCreatedSlug] = useState<string | null>(null)
   const router = useRouter()
   const createFund = useCreateFund()
+  const createMedical = useCreateMedical()
   const invite = useInvite(createdFundId ?? '')
 
   // Invite flow (Susu) — invites store raw 9-digit numbers
@@ -57,8 +66,30 @@ export default function CreateFundPage() {
   async function handleCreate() {
     if (!canSubmit) return
     if (!isSusu) {
-      // Medical fundraising isn't wired to the backend yet (EM epic).
-      toast.info('Medical fundraising is coming soon — Susu is live.')
+      try {
+        const res = await createMedical.mutateAsync({
+          type: 'Medical',
+          name,
+          goal: toPesewas(goalNum),
+          beneficiary,
+          story,
+          hospital: hospital || undefined,
+          payoutRoute,
+          payee: {
+            name: payeeName,
+            momo: payoutRoute === 'hospital_bank' ? undefined : `+233${payeeMomo}`,
+            network: payoutRoute === 'hospital_bank' ? undefined : payeeNetwork,
+            bank: payoutRoute === 'hospital_bank' ? payeeBank : undefined,
+          },
+          deadline: deadline ? new Date(`${deadline}T00:00:00Z`).toISOString() : undefined,
+          shareable,
+        })
+        setCreatedFundId(res.id)
+        setCreatedSlug(res.slug)
+        setSubmitted(true)
+      } catch (e) {
+        toast.error(e instanceof ApiError ? e.message : 'Could not create fundraiser')
+      }
       return
     }
     try {
@@ -70,9 +101,9 @@ export default function CreateFundPage() {
         frequency: frequency === 'Weekly' ? 'weekly' : 'monthly',
         memberCount: membersNum,
         startDate,
-        payoutRule: payout === 'Random draw' ? 'random' : 'rotating',
-        requiresDeposit: false,
-        depositAmount: 0,
+        payoutRule: payout === 'Random draw' ? 'random' : payout === 'Arrange myself' ? 'manual' : 'rotating',
+        requiresDeposit,
+        depositAmount: requiresDeposit ? toPesewas(depositNum) : 0,
       })
       setCreatedFundId(res.id)
       setSubmitted(true)
@@ -99,10 +130,12 @@ export default function CreateFundPage() {
   const everyLabel = frequency === 'Weekly' ? 'week' : 'month'
   const periodLabel = frequency === 'Weekly' ? 'weeks' : 'months'
   const cyclePot = amountNum > 0 && membersNum > 0 ? amountNum * membersNum : 0
+  const depositNum = Number(depositAmount)
 
+  const payeeOk = payoutRoute === 'hospital_bank' ? payeeBank.trim().length > 0 : payeeMomo.replace(/\D/g, '').length >= 9
   const canSubmit = isSusu
-    ? Boolean(name && amountNum > 0 && membersNum > 0)
-    : Boolean(name && goalNum > 0 && beneficiary && story)
+    ? Boolean(name && amountNum > 0 && membersNum >= 2 && membersNum <= 50 && (!requiresDeposit || depositNum > 0))
+    : Boolean(name && goalNum > 0 && beneficiary && story && payeeName && payeeOk)
 
   const inviteLink = `circlepay.app/join/${(name || 'fund').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}`
   const fmtPhone = (d: string) => `${d.slice(0, 2)} ${d.slice(2, 5)} ${d.slice(5, 9)}`
@@ -124,7 +157,7 @@ export default function CreateFundPage() {
     return (
       <AppShell currentPage="funds" title="Create a fund">
         <div className="max-w-md mx-auto pb-6">
-          <div className="cp-card p-6 sm:p-8 space-y-6">
+          <div className="cp-card p-5 sm:p-6 space-y-6">
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowInvite(false)}
@@ -170,7 +203,7 @@ export default function CreateFundPage() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-foreground">Add by MoMo number</label>
                   <div className="flex gap-2">
-                    <div className="flex items-center h-12 rounded-xl border-2 border-border bg-card px-3 flex-1 min-w-0 focus-within:border-primary">
+                    <div className="flex items-center h-11 rounded-lg border border-border bg-card px-3 flex-1 min-w-0 focus-within:border-primary">
                       <span className="text-sm font-medium text-foreground border-r border-border pr-2 mr-2 whitespace-nowrap">
                         🇬🇭 +233
                       </span>
@@ -191,7 +224,7 @@ export default function CreateFundPage() {
                     <button
                       onClick={addInvite}
                       disabled={invitePhone.length < 9}
-                      className="h-12 px-4 rounded-xl bg-primary text-primary-foreground font-semibold disabled:bg-muted disabled:text-secondary transition-colors flex items-center gap-1 flex-shrink-0"
+                      className="h-11 px-4 rounded-lg bg-primary text-primary-foreground font-semibold disabled:bg-muted disabled:text-secondary transition-colors flex items-center gap-1 flex-shrink-0"
                     >
                       <Plus className="h-4 w-4" />
                       Add
@@ -272,7 +305,7 @@ export default function CreateFundPage() {
     return (
       <AppShell currentPage="funds" title="Create a fund">
         <div className="max-w-md mx-auto pb-6">
-          <div className="cp-card p-6 sm:p-8 text-center space-y-6">
+          <div className="cp-card p-5 sm:p-6 text-center space-y-6">
             <div className="mx-auto h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
               <CheckCircle2 className="h-9 w-9 text-primary" />
             </div>
@@ -313,13 +346,13 @@ export default function CreateFundPage() {
                   Invite members
                 </button>
               ) : (
-                <Link href="/f/kofi-mensah" className="cp-btn-primary w-full">
+                <Link href={`/f/${createdSlug ?? ''}`} className="cp-btn-primary w-full">
                   <Share2 className="h-4 w-4" />
                   Share fund
                 </Link>
               )}
               <Link
-                href={isSusu ? susuHref : '/funds/kofi-mensah'}
+                href={isSusu ? susuHref : `/fundraisers/${createdFundId ?? ''}`}
                 className="cp-btn-ghost w-full"
               >
                 Go to fund
@@ -338,7 +371,7 @@ export default function CreateFundPage() {
   // ---------- FORM ----------
   return (
     <AppShell currentPage="funds" title="Create a fund">
-      <div className="max-w-xl mx-auto space-y-6 pb-6">
+      <div className="max-w-xl lg:max-w-5xl mx-auto space-y-6 pb-6">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold text-foreground">Let&apos;s set up your fund</h1>
           <p className="text-sm text-secondary">
@@ -350,6 +383,8 @@ export default function CreateFundPage() {
           </p>
         </div>
 
+        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-8 lg:items-start">
+        <div className="space-y-6">
         <div className="cp-card p-5 sm:p-6 space-y-6">
           {/* Type toggle */}
           <div className="space-y-2">
@@ -394,64 +429,98 @@ export default function CreateFundPage() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={isSusu ? 'e.g. Kumasi Traders' : "e.g. Kofi's surgery"}
+              maxLength={80}
               className="cp-input"
             />
           </Field>
 
           {isSusu ? (
             <>
-              <Field label="Contribution amount (GHS)">
-                <input
-                  inputMode="numeric"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))}
-                  placeholder="500"
-                  className="cp-input"
-                />
-              </Field>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Contribution amount (GHS)">
+                  <input
+                    inputMode="numeric"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))}
+                    placeholder="500"
+                    className="cp-input"
+                  />
+                </Field>
 
-              <Field label="How often?">
-                <div className="grid grid-cols-2 gap-2">
-                  {(['Weekly', 'Monthly'] as Frequency[]).map((f) => (
-                    <Pill key={f} active={frequency === f} onClick={() => setFrequency(f)}>
-                      {f}
-                    </Pill>
-                  ))}
-                </div>
-              </Field>
+                <Field label="How many members?">
+                  <input
+                    inputMode="numeric"
+                    value={members}
+                    onChange={(e) => setMembers(e.target.value.replace(/\D/g, ''))}
+                    placeholder="10"
+                    className="cp-input"
+                  />
+                  <p className={`text-xs mt-1.5 ${members && (membersNum < 2 || membersNum > 50) ? 'text-destructive' : 'text-secondary'}`}>
+                    {membersNum > 50 ? 'Maximum 50 members.' : members && membersNum < 2 ? 'A Susu needs at least 2 members.' : 'Between 2 and 50 — one payout per member.'}
+                  </p>
+                </Field>
+              </div>
 
-              <Field label="How many members?">
-                <input
-                  inputMode="numeric"
-                  value={members}
-                  onChange={(e) => setMembers(e.target.value.replace(/\D/g, ''))}
-                  placeholder="10"
-                  className="cp-input"
-                />
-              </Field>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="How often?">
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['Weekly', 'Monthly'] as Frequency[]).map((f) => (
+                      <Pill key={f} active={frequency === f} onClick={() => setFrequency(f)}>
+                        {f}
+                      </Pill>
+                    ))}
+                  </div>
+                </Field>
 
-              <Field label="When does it start?">
-                <input
-                  type="month"
-                  value={startMonth}
-                  onChange={(e) => setStartMonth(e.target.value)}
-                  className="cp-input"
-                />
-              </Field>
+                <Field label="When does it start?">
+                  <input
+                    type="month"
+                    value={startMonth}
+                    onChange={(e) => setStartMonth(e.target.value)}
+                    className="cp-input"
+                  />
+                </Field>
+              </div>
 
               <Field label="Payout rule">
                 <div className="grid grid-cols-2 gap-2">
-                  {(['Rotating order', 'Random draw'] as Payout[]).map((p) => (
+                  {(['Rotating order', 'Random draw', 'Arrange myself'] as Payout[]).map((p) => (
                     <Pill key={p} active={payout === p} onClick={() => setPayout(p)}>
                       {p}
                     </Pill>
                   ))}
                 </div>
+                {payout === 'Arrange myself' && (
+                  <p className="text-xs text-secondary mt-1.5 leading-relaxed">
+                    You&apos;ll set who&apos;s paid in which cycle on the fund page once members join — and can reshuffle upcoming turns anytime before they&apos;re paid.
+                  </p>
+                )}
+              </Field>
+
+              <Field label="Security deposit">
+                <div className="grid grid-cols-2 gap-2">
+                  <Pill active={!requiresDeposit} onClick={() => setRequiresDeposit(false)}>Not required</Pill>
+                  <Pill active={requiresDeposit} onClick={() => setRequiresDeposit(true)}>Require a deposit</Pill>
+                </div>
+                {requiresDeposit && (
+                  <div className="mt-2 space-y-1.5">
+                    <input
+                      inputMode="numeric"
+                      value={depositAmount}
+                      onChange={(e) => setDepositAmount(e.target.value.replace(/\D/g, ''))}
+                      placeholder="Deposit per member (GHS), e.g. 200"
+                      className="cp-input"
+                    />
+                    <p className="text-xs text-secondary leading-relaxed">
+                      A buffer each member pays on joining. If someone misses a turn, their deposit covers that cycle so the payee is still paid in full.
+                    </p>
+                  </div>
+                )}
               </Field>
 
               {/* Live summary */}
               {cyclePot > 0 && (
-                <div className="rounded-xl bg-primary/5 p-4 text-sm text-foreground leading-relaxed">
+                <div className="rounded-xl bg-primary/5 p-4 text-sm text-foreground leading-relaxed lg:hidden">
                   Each cycle, one member receives{' '}
                   <span className="font-semibold text-primary">GHS {cyclePot.toLocaleString()}</span>.{' '}
                   {membersNum} members × GHS {amountNum.toLocaleString()}/{everyLabel} · the circle runs about{' '}
@@ -461,15 +530,26 @@ export default function CreateFundPage() {
             </>
           ) : (
             <>
-              <Field label="Fundraising goal (GHS)">
-                <input
-                  inputMode="numeric"
-                  value={goal}
-                  onChange={(e) => setGoal(e.target.value.replace(/\D/g, ''))}
-                  placeholder="5000"
-                  className="cp-input"
-                />
-              </Field>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Fundraising goal (GHS)">
+                  <input
+                    inputMode="numeric"
+                    value={goal}
+                    onChange={(e) => setGoal(e.target.value.replace(/\D/g, ''))}
+                    placeholder="5000"
+                    className="cp-input"
+                  />
+                </Field>
+
+                <Field label="By when? (optional)">
+                  <input
+                    type="date"
+                    value={deadline}
+                    onChange={(e) => setDeadline(e.target.value)}
+                    className="cp-input"
+                  />
+                </Field>
+              </div>
 
               <Field label="Who is it for?">
                 <input
@@ -502,15 +582,6 @@ export default function CreateFundPage() {
                 />
               </Field>
 
-              <Field label="By when? (optional)">
-                <input
-                  type="date"
-                  value={deadline}
-                  onChange={(e) => setDeadline(e.target.value)}
-                  className="cp-input"
-                />
-              </Field>
-
               {/* Shareable toggle */}
               <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
                 <div className="min-w-0">
@@ -520,18 +591,73 @@ export default function CreateFundPage() {
                 <Toggle on={shareable} onClick={() => setShareable((v) => !v)} label="Shareable link" />
               </div>
 
-              {/* Payout rule (read-only) */}
-              <div className="flex items-center justify-between rounded-xl bg-primary/5 p-3">
-                <span className="text-xs font-medium text-secondary">Payout</span>
-                <span className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-                  <BadgeCheck className="h-4 w-4 text-primary" />
-                  Direct to verified hospital
-                </span>
-              </div>
+              {/* Payout route — money goes straight to the verified payee, never the organizer */}
+              <Field label="Where do funds go?">
+                <div className="grid gap-2">
+                  <Pill active={payoutRoute === 'hospital_bank'} onClick={() => setPayoutRoute('hospital_bank')}>Hospital bank account</Pill>
+                  <Pill active={payoutRoute === 'hospital_momo'} onClick={() => setPayoutRoute('hospital_momo')}>Hospital MoMo</Pill>
+                  <Pill active={payoutRoute === 'individual_cash'} onClick={() => setPayoutRoute('individual_cash')}>A person&apos;s MoMo (family or you)</Pill>
+                </div>
+                <p className="text-xs text-secondary mt-1.5 flex items-start gap-1.5">
+                  <BadgeCheck className="h-3.5 w-3.5 text-primary flex-shrink-0 mt-0.5" />
+                  {payoutRoute === 'individual_cash'
+                    ? 'Goes to the MoMo number you enter — you release it yourself, any time. No review needed.'
+                    : 'Ops verifies the payee before any payout. CirclePay never holds the money.'}
+                </p>
+              </Field>
+
+              <Field label="Payee name">
+                <input
+                  value={payeeName}
+                  onChange={(e) => setPayeeName(e.target.value)}
+                  placeholder={payoutRoute === 'hospital_bank' ? 'e.g. Korle Bu Teaching Hospital' : payoutRoute === 'individual_cash' ? 'e.g. Ama Mensah (sister)' : 'e.g. Korle Bu MoMo merchant'}
+                  className="cp-input"
+                />
+              </Field>
+
+              {payoutRoute === 'hospital_bank' ? (
+                <Field label="Hospital bank account">
+                  <input
+                    value={payeeBank}
+                    onChange={(e) => setPayeeBank(e.target.value)}
+                    placeholder="Account number"
+                    className="cp-input"
+                  />
+                </Field>
+              ) : (
+                <Field label={payoutRoute === 'individual_cash' ? "Person's MoMo number" : 'Hospital MoMo number'}>
+                  <div className="flex items-center h-11 rounded-lg border border-border bg-card px-3 focus-within:border-primary">
+                    <span className="text-sm font-medium text-foreground border-r border-border pr-2 mr-2 whitespace-nowrap">🇬🇭 +233</span>
+                    <input
+                      inputMode="numeric"
+                      value={payeeMomo}
+                      onChange={(e) => setPayeeMomo(e.target.value.replace(/\D/g, '').slice(0, 9))}
+                      placeholder="XX XXX XXXX"
+                      className="flex-1 min-w-0 bg-transparent text-base text-foreground placeholder:text-secondary focus:outline-none"
+                    />
+                  </div>
+                  <div className="flex gap-2 mt-2">
+                    {(['MTN', 'Telecel', 'AirtelTigo'] as const).map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => setPayeeNetwork(n)}
+                        className={`h-8 rounded-full px-3 text-xs font-medium transition-colors ${
+                          payeeNetwork === n
+                            ? 'bg-primary text-primary-foreground'
+                            : 'border border-border text-secondary hover:text-foreground hover:border-primary/40'
+                        }`}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                </Field>
+              )}
 
               {/* Live summary */}
               {goalNum > 0 && beneficiary && (
-                <div className="rounded-xl bg-primary/5 p-4 text-sm text-foreground leading-relaxed">
+                <div className="rounded-xl bg-primary/5 p-4 text-sm text-foreground leading-relaxed lg:hidden">
                   Raising <span className="font-semibold text-primary">GHS {goalNum.toLocaleString()}</span> for{' '}
                   {beneficiary}
                   {hospital ? ` at ${hospital}` : ''}. Funds go straight to the hospital — CirclePay never holds the money.
@@ -547,11 +673,11 @@ export default function CreateFundPage() {
           </Link>
           <button
             type="button"
-            disabled={!canSubmit || createFund.isPending}
+            disabled={!canSubmit || createFund.isPending || createMedical.isPending}
             onClick={handleCreate}
             className="cp-btn-primary flex-1"
           >
-            {createFund.isPending ? (
+            {createFund.isPending || createMedical.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <>
@@ -561,6 +687,59 @@ export default function CreateFundPage() {
             )}
           </button>
         </div>
+        </div>{/* /left column */}
+
+        {/* Live preview — desktop only; fills the space and mirrors what they're building */}
+        <aside className="hidden lg:block lg:sticky lg:top-24">
+          <p className="text-xs font-semibold text-secondary uppercase tracking-wide mb-3">Preview</p>
+          {isSusu ? (
+            <div className="cp-card p-5 space-y-4">
+              <span className="inline-flex items-center rounded-full text-xs font-semibold px-2.5 py-1 bg-primary/15 text-primary">Susu</span>
+              <p className="text-base font-bold text-foreground">{name.trim() || 'Your circle'}</p>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-4">
+                <PreviewStat label="Per cycle" value={amountNum > 0 ? `GHS ${amountNum.toLocaleString()}/${everyLabel}` : '—'} />
+                <PreviewStat label="Members" value={membersNum > 0 ? String(membersNum) : '—'} />
+                <PreviewStat label="Pot each cycle" value={cyclePot > 0 ? `GHS ${cyclePot.toLocaleString()}` : '—'} accent />
+                <PreviewStat label="Payout" value={payout} />
+                {requiresDeposit && (
+                  <PreviewStat label="Deposit" value={depositNum > 0 ? `GHS ${depositNum.toLocaleString()}` : '—'} />
+                )}
+              </div>
+              <p className="text-xs text-secondary leading-relaxed border-t border-border/60 pt-3">
+                Invite members after you create — the circle starts automatically once it fills.
+              </p>
+            </div>
+          ) : (
+            <div className="cp-card p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center rounded-full text-xs font-semibold px-2.5 py-1 bg-destructive/10 text-destructive">Medical</span>
+                <span className="inline-flex items-center rounded-full text-xs font-medium px-2.5 py-1 bg-muted text-secondary">Pending verification</span>
+              </div>
+              <div>
+                <p className="text-base font-bold text-foreground">{name.trim() || 'Your fundraiser'}</p>
+                <p className="text-xs text-secondary mt-0.5">
+                  {beneficiary.trim() ? `For ${beneficiary.trim()}` : 'Who is it for?'}
+                  {hospital.trim() ? ` · ${hospital.trim()}` : ''}
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-medium text-secondary">Raised</span>
+                  <span className="font-semibold text-primary">0%</span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2">
+                  <div className="bg-primary h-2 rounded-full" style={{ width: '0%' }} />
+                </div>
+                <p className="text-xs text-secondary tabular-nums">GHS 0 of GHS {goalNum > 0 ? goalNum.toLocaleString() : '—'}</p>
+              </div>
+              <p className="text-xs text-secondary leading-relaxed border-t border-border/60 pt-3 flex items-start gap-1.5">
+                <BadgeCheck className="h-3.5 w-3.5 text-primary flex-shrink-0 mt-0.5" />
+                Funds go straight to the verified payee. CirclePay never holds the money. Powered by Moolre.
+              </p>
+            </div>
+          )}
+        </aside>
+        </div>{/* /grid */}
       </div>
     </AppShell>
   )
@@ -575,12 +754,21 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
+function PreviewStat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-xs text-secondary">{label}</p>
+      <p className={`text-sm font-semibold tabular-nums truncate ${accent ? 'text-primary' : 'text-foreground'}`}>{value}</p>
+    </div>
+  )
+}
+
 function Pill({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`h-11 rounded-full text-sm font-medium transition-colors ${
+      className={`h-11 rounded-full px-4 text-sm font-medium transition-colors ${
         active ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-foreground hover:border-primary/40'
       }`}
     >

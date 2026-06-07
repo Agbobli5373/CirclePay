@@ -1,7 +1,9 @@
 'use client'
 
-import { Home, Wallet, Users, ActivitySquare, User, Bell, ChevronLeft, ChevronRight, LogOut, Loader2 } from 'lucide-react'
+import Link from 'next/link'
+import { Home, Wallet, ActivitySquare, User, ChevronLeft, ChevronRight, LogOut, Loader2 } from 'lucide-react'
 import { Logo, LogoMark } from './logo'
+import { NotificationsBell } from './notifications-bell'
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -24,14 +26,13 @@ function initialsOf(name: string | null, phone: string): string {
 
 interface AppShellProps {
   children: React.ReactNode
-  currentPage?: 'home' | 'funds' | 'pools' | 'activity' | 'profile'
+  currentPage?: 'home' | 'funds' | 'activity' | 'profile'
   title?: string
 }
 
 const navItems = [
   { id: 'home', label: 'Home', icon: Home, href: '/' },
   { id: 'funds', label: 'Funds', icon: Wallet, href: '/funds' },
-  { id: 'pools', label: 'Pools', icon: Users, href: '/pools' },
   { id: 'activity', label: 'Activity', icon: ActivitySquare, href: '/activity' },
   { id: 'profile', label: 'Profile', icon: User, href: '/profile' },
 ]
@@ -44,7 +45,7 @@ export function AppShell({ children, currentPage = 'home' }: AppShellProps) {
 
   // Client-side auth gate (session cookie lives on the API origin, so middleware can't see it).
   useEffect(() => {
-    if (isError) router.replace('/onboarding')
+    if (isError) router.replace('/onboarding?mode=login')
   }, [isError, router])
 
   if (isLoading || !me) {
@@ -61,7 +62,7 @@ export function AppShell({ children, currentPage = 'home' }: AppShellProps) {
 
   async function handleLogout() {
     await logout.mutateAsync().catch(() => undefined)
-    router.replace('/onboarding')
+    router.replace('/onboarding?mode=login')
   }
 
   return (
@@ -93,7 +94,7 @@ export function AppShell({ children, currentPage = 'home' }: AppShellProps) {
             const Icon = item.icon
             const isActive = currentPage === item.id
             const link = (
-              <a
+              <Link
                 href={item.href}
                 className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors ${
                   isActive
@@ -103,7 +104,7 @@ export function AppShell({ children, currentPage = 'home' }: AppShellProps) {
               >
                 <Icon className="h-5 w-5 flex-shrink-0" />
                 {isSidebarOpen && <span>{item.label}</span>}
-              </a>
+              </Link>
             )
 
             if (isSidebarOpen) {
@@ -123,7 +124,7 @@ export function AppShell({ children, currentPage = 'home' }: AppShellProps) {
         <div className="p-3 border-t border-border">
           {(() => {
             const account = (
-              <a
+              <Link
                 href="/profile"
                 className={`flex items-center gap-3 rounded-2xl p-2 hover:bg-muted transition-colors ${!isSidebarOpen && 'justify-center'}`}
               >
@@ -136,7 +137,7 @@ export function AppShell({ children, currentPage = 'home' }: AppShellProps) {
                     <p className="text-xs text-secondary">{standing}</p>
                   </div>
                 )}
-              </a>
+              </Link>
             )
 
             if (isSidebarOpen) return account
@@ -155,10 +156,7 @@ export function AppShell({ children, currentPage = 'home' }: AppShellProps) {
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Desktop top bar */}
         <header className="sticky top-0 z-40 hidden lg:flex items-center justify-end gap-1 h-16 px-6 border-b border-border bg-background">
-          <button className="relative p-2 text-secondary hover:text-foreground hover:bg-muted rounded-full transition-colors">
-            <Bell className="h-5 w-5" />
-            <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive" />
-          </button>
+          <NotificationsBell />
           <button
             onClick={handleLogout}
             title="Log out"
@@ -171,10 +169,7 @@ export function AppShell({ children, currentPage = 'home' }: AppShellProps) {
         {/* Mobile top bar */}
         <header className="sticky top-0 z-40 flex items-center justify-between h-14 px-4 border-b border-border bg-background/90 backdrop-blur-sm lg:hidden">
           <Logo />
-          <button className="relative p-2 text-secondary">
-            <Bell className="h-5 w-5" />
-            <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-destructive" />
-          </button>
+          <NotificationsBell />
         </header>
 
         {/* Page content */}
@@ -191,7 +186,7 @@ export function AppShell({ children, currentPage = 'home' }: AppShellProps) {
           const Icon = item.icon
           const isActive = currentPage === item.id
           return (
-            <a
+            <Link
               key={item.id}
               href={item.href}
               className={`flex flex-1 flex-col items-center justify-center gap-1 rounded-lg p-2 text-xs font-medium transition-colors ${
@@ -200,7 +195,7 @@ export function AppShell({ children, currentPage = 'home' }: AppShellProps) {
             >
               <Icon className="h-5 w-5" />
               <span>{item.label}</span>
-            </a>
+            </Link>
           )
         })}
       </nav>

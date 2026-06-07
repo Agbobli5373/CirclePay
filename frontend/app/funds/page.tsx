@@ -4,10 +4,12 @@ import Link from 'next/link'
 import { AppShell } from '@/components/app-shell'
 import { Search, Plus, Users, RefreshCcw, Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { useState } from 'react'
-import { useFunds } from '@/lib/queries'
+import { useEffect, useMemo, useState } from 'react'
+import { useFunds, useMyFundraisers } from '@/lib/queries'
 import { formatGhs } from '@circlepay/shared'
-import type { FundSummary } from '@/lib/api'
+import type { FundSummary, MyFundraiser } from '@/lib/api'
+import { MedicalFundCard } from '@/components/medical-fund-card'
+import { SelectMenu } from '@/components/select-menu'
 
 function FundCard({ fund }: { fund: FundSummary }) {
   return (
@@ -53,37 +55,121 @@ function FundCard({ fund }: { fund: FundSummary }) {
   )
 }
 
+type TypeFilter = 'all' | 'Susu' | 'Medical'
+type StatusFilter = 'all' | 'active' | 'completed'
+type SortKey = 'recent' | 'name' | 'progress'
+
+/** Cards revealed before "Load more" — a multiple of 6 so the last row is full at 2- and 3-col widths. */
+const PAGE_SIZE = 6
+
+/** Normalised row so Susu funds + medical fundraisers can share one filterable/sortable grid. */
+type Row =
+  | { kind: 'Susu'; id: string; name: string; status: string; progress: number; createdAt: string; fund: FundSummary }
+  | { kind: 'Medical'; id: string; name: string; beneficiary: string; status: string; progress: number; createdAt: string; m: MyFundraiser }
+
 export default function FundsPage() {
   const [search, setSearch] = useState('')
+  const [type, setType] = useState<TypeFilter>('all')
+  const [status, setStatus] = useState<StatusFilter>('all')
+  const [sort, setSort] = useState<SortKey>('recent')
+  const [visible, setVisible] = useState(PAGE_SIZE)
   const { data: funds, isLoading, isError, refetch } = useFunds('mine')
+  const { data: medical } = useMyFundraisers()
 
-  const filtered = (funds ?? []).filter((f) => f.name.toLowerCase().includes(search.toLowerCase()))
+  const all: Row[] = useMemo(
+    () => [
+      ...(funds ?? []).map((f): Row => ({ kind: 'Susu', id: f.id, name: f.name, status: f.status, progress: f.progressPercent, createdAt: f.createdAt, fund: f })),
+      ...(medical ?? []).map((m): Row => ({ kind: 'Medical', id: m.id, name: m.name, beneficiary: m.beneficiary, status: m.status, progress: m.progressPercent, createdAt: m.createdAt, m })),
+    ],
+    [funds, medical],
+  )
+
+  const rows = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const filtered = all.filter((r) => {
+      if (type !== 'all' && r.kind !== type) return false
+      if (status !== 'all' && r.status !== status) return false
+      if (q && !r.name.toLowerCase().includes(q) && !(r.kind === 'Medical' && r.beneficiary.toLowerCase().includes(q))) return false
+      return true
+    })
+    return filtered.sort((a, b) => {
+      if (sort === 'name') return a.name.localeCompare(b.name)
+      if (sort === 'progress') return b.progress - a.progress
+      return b.createdAt.localeCompare(a.createdAt) // recent — ISO strings sort chronologically
+    })
+  }, [all, search, type, status, sort])
+
+  // Reset the reveal count whenever the filters/search/sort change, so you start from the top.
+  useEffect(() => {
+    setVisible(PAGE_SIZE)
+  }, [type, status, sort, search])
+
+  const types: TypeFilter[] = ['all', 'Susu', 'Medical']
 
   return (
     <AppShell currentPage="funds">
-      <div className="space-y-6 pb-6">
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">Funds</h1>
-            <p className="text-secondary mt-1">Your Susu circles</p>
+      <div className="space-y-5 pb-6">
+        {/* Title bar: title | search | action */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-2xl font-bold text-foreground">Funds</h1>
+            <p className="text-secondary mt-1">Your savings circles &amp; fundraisers</p>
+          </div>
+          <div className="relative w-full sm:w-64 shrink-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary pointer-events-none" />
+            <Input
+              placeholder="Search your funds..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-10 h-10 bg-card border-border"
+            />
           </div>
           <Link
             href="/create"
-            className="rounded-full bg-primary hover:bg-primary/90 text-primary-foreground flex items-center gap-2 px-5 py-2.5 text-sm font-medium transition-colors"
+            className="rounded-full bg-primary hover:bg-primary/90 text-primary-foreground flex items-center gap-2 px-5 py-2.5 text-sm font-medium transition-colors shrink-0"
           >
             <Plus className="h-4 w-4" />
             Create Fund
           </Link>
         </div>
 
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-secondary" />
-          <Input
-            placeholder="Search your funds..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10 h-10 bg-card border-border"
-          />
+        {/* Filter / sort bar: type pills (left) · status + sort (right) */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex gap-1.5 overflow-x-auto">
+            {types.map((t) => (
+              <button
+                key={t}
+                onClick={() => setType(t)}
+                className={`px-4 h-10 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
+                  type === t ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-foreground hover:border-primary/40'
+                }`}
+              >
+                {t === 'all' ? 'All' : t}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <SelectMenu
+              ariaLabel="Filter by status"
+              value={status}
+              onChange={setStatus}
+              options={[
+                { value: 'all', label: 'All statuses' },
+                { value: 'active', label: 'Active' },
+                { value: 'completed', label: 'Completed' },
+              ]}
+            />
+            <SelectMenu
+              ariaLabel="Sort by"
+              value={sort}
+              onChange={setSort}
+              options={[
+                { value: 'recent', label: 'Newest' },
+                { value: 'name', label: 'Name (A–Z)' },
+                { value: 'progress', label: 'Most progress' },
+              ]}
+            />
+          </div>
         </div>
 
         {isLoading && (
@@ -101,22 +187,37 @@ export default function FundsPage() {
           </div>
         )}
 
-        {!isLoading && !isError && (
+        {!isLoading && !isError && rows.length > 0 && (
           <>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {filtered.map((fund) => (
-                <FundCard key={fund.id} fund={fund} />
-              ))}
+              {rows.slice(0, visible).map((r) => (r.kind === 'Susu' ? <FundCard key={r.id} fund={r.fund} /> : <MedicalFundCard key={r.id} f={r.m} />))}
             </div>
-            {filtered.length === 0 && (
-              <div className="text-center py-12">
-                <p className="text-secondary">You haven&apos;t joined any Susu yet.</p>
-                <Link href="/create" className="cp-btn-primary mt-4 inline-flex">
-                  <Plus className="h-4 w-4" /> Create your first Susu
-                </Link>
-              </div>
-            )}
+            <div className="flex flex-col items-center gap-3 pt-1 text-center">
+              <p className="text-xs text-secondary">
+                {visible < rows.length ? `Showing ${visible} of ${rows.length}` : `${rows.length} ${rows.length === 1 ? 'fund' : 'funds'}`}
+              </p>
+              {visible < rows.length && (
+                <button onClick={() => setVisible((v) => v + PAGE_SIZE)} className="cp-btn-ghost">
+                  Load more
+                </button>
+              )}
+            </div>
           </>
+        )}
+
+        {!isLoading && !isError && rows.length === 0 && (
+          <div className="text-center py-12">
+            {all.length === 0 ? (
+              <>
+                <p className="text-secondary">You haven&apos;t created any funds yet.</p>
+                <Link href="/create" className="cp-btn-primary mt-4 inline-flex">
+                  <Plus className="h-4 w-4" /> Create your first fund
+                </Link>
+              </>
+            ) : (
+              <p className="text-secondary">No funds match these filters.</p>
+            )}
+          </div>
         )}
       </div>
     </AppShell>

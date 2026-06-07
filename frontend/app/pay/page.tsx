@@ -3,11 +3,12 @@
 import { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Logo } from '@/components/logo'
+import { OtpInput } from '@/components/otp-input'
 import { ShieldCheck, CheckCircle2, X, Loader2, AlertCircle } from 'lucide-react'
 import { formatGhs } from '@circlepay/shared'
-import { api, ApiError, type ContributionResult } from '@/lib/api'
+import { api, ApiError, type ContributionResult, type DepositResult } from '@/lib/api'
 import { useFund, useMe } from '@/lib/queries'
 
 type Step = 'confirm' | 'otp' | 'processing' | 'success' | 'error'
@@ -16,25 +17,33 @@ function newKey() {
   return (globalThis.crypto?.randomUUID?.() ?? `cp-${Date.now()}-${Math.random()}`)
 }
 
+/** Stop polling after ~60s. A deposit status is only 'initiated' | 'settled' (never 'failed'),
+ *  so without a cap a stuck/abandoned deposit would spin the 'Confirming…' screen forever. */
+const MAX_POLLS = 30
+
 function PayInner() {
   const params = useSearchParams()
   const fundId = params.get('fund') ?? ''
+  const isDeposit = params.get('kind') === 'deposit'
   const { data: me } = useMe()
   const { data: fund, isLoading } = useFund(fundId)
+  const qc = useQueryClient()
 
   const [step, setStep] = useState<Step>('confirm')
   const [idemKey, setIdemKey] = useState(newKey)
   const [otp, setOtp] = useState('')
   const [busy, setBusy] = useState(false)
-  const [result, setResult] = useState<ContributionResult | null>(null)
+  const [result, setResult] = useState<ContributionResult | DepositResult | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
+  const [polls, setPolls] = useState(0)
 
   const externalref = result?.externalref ?? null
 
   // Poll settlement once initiated.
   const { data: poll } = useQuery({
-    queryKey: ['contrib', externalref],
-    queryFn: () => api.contributions.status(externalref as string),
+    queryKey: [isDeposit ? 'deposit' : 'contrib', externalref],
+    queryFn: (): Promise<{ status: string }> =>
+      isDeposit ? api.deposits.status(externalref as string) : api.contributions.status(externalref as string),
     enabled: !!externalref && step === 'processing',
     refetchInterval: (q) =>
       q.state.data?.status === 'settled' || q.state.data?.status === 'failed' ? false : 2000,
@@ -42,17 +51,29 @@ function PayInner() {
 
   useEffect(() => {
     if (!poll) return
-    if (poll.status === 'settled') setStep('success')
-    else if (poll.status === 'failed') {
+    if (poll.status === 'settled') { setStep('success'); return }
+    if (poll.status === 'failed') {
       setErrorMsg('The payment failed. Please try again.')
       setStep('error')
+      return
     }
+    // Still pending — cap polling so a stuck payment doesn't spin forever.
+    setPolls((n) => {
+      if (n + 1 >= MAX_POLLS) {
+        setErrorMsg('This is taking longer than usual — it may still complete. Check the fund page in a moment.')
+        setStep('error')
+      }
+      return n + 1
+    })
   }, [poll])
 
   async function submit(otpcode?: string) {
     setBusy(true)
+    setPolls(0)
     try {
-      const res = await api.contributions.initiate(fundId, idemKey, otpcode)
+      const res = isDeposit
+        ? await api.deposits.initiate(fundId, idemKey, otpcode)
+        : await api.contributions.initiate(fundId, idemKey, otpcode)
       setResult(res)
       if (res.state === 'otp_required') setStep('otp')
       else if (res.state === 'settled') setStep('success')
@@ -69,10 +90,14 @@ function PayInner() {
   }
 
   function retry() {
+    // Drop any stale cached status for this externalref so a re-initiated payment polls fresh
+    // (the externalref is deterministic, so the cache would otherwise echo the prior 'failed').
+    if (externalref) qc.removeQueries({ queryKey: [isDeposit ? 'deposit' : 'contrib', externalref] })
     setIdemKey(newKey())
     setOtp('')
     setResult(null)
     setErrorMsg('')
+    setPolls(0)
     setStep('confirm')
   }
 
@@ -85,36 +110,42 @@ function PayInner() {
   }
 
   const payeeName = fund.currentPayeeUserId === me?.id ? 'You' : fund.members.find((m) => m.userId === fund.currentPayeeUserId)?.name || 'Member'
-  const amount = result?.amount ?? fund.contribution
-  const fee = result?.fee ?? 0
-  const total = result?.total ?? amount + fee
+  const amount = result?.amount ?? (isDeposit ? fund.depositAmount : fund.contribution)
+  const fee = !isDeposit && result && 'fee' in result ? result.fee : 0
+  const total = !isDeposit && result && 'total' in result ? result.total : amount
   const maskedNumber = me ? `0${me.phone.slice(4, 6)} ••• ••${me.phone.slice(-2)}` : ''
 
   return (
     <div className="w-full max-w-md">
       {step === 'success' ? (
-        <div className="cp-card p-6 sm:p-8 space-y-6">
+        <div className="cp-card p-5 sm:p-6 space-y-6">
           <div className="text-center space-y-3">
             <div className="mx-auto h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
               <CheckCircle2 className="h-9 w-9 text-primary" />
             </div>
             <div>
-              <h1 className="text-2xl font-semibold text-foreground">Payment sent</h1>
-              <p className="text-sm text-secondary mt-1">{formatGhs(total)} paid to {fund.name}</p>
+              <h1 className="text-2xl font-semibold text-foreground">{isDeposit ? 'Deposit paid' : 'Payment sent'}</h1>
+              <p className="text-sm text-secondary mt-1">{formatGhs(total)} {isDeposit ? 'deposit to' : 'paid to'} {fund.name}</p>
             </div>
           </div>
           <div className="rounded-xl bg-muted/50 border border-border p-4 space-y-2 font-mono text-xs text-foreground">
             <p className="text-secondary">CirclePay · MoMo receipt</p>
-            <p>Paid {formatGhs(amount)} to {fund.name}.</p>
-            <p>Fee {formatGhs(fee)}. Total {formatGhs(total)}.</p>
-            <p>Cycle {result?.cycle ?? fund.currentCycle} recipient: {payeeName}.</p>
+            {isDeposit ? (
+              <p>Security deposit {formatGhs(amount)} for {fund.name}.</p>
+            ) : (
+              <>
+                <p>Paid {formatGhs(amount)} to {fund.name}.</p>
+                <p>Fee {formatGhs(fee)}. Total {formatGhs(total)}.</p>
+                <p>Cycle {result && 'cycle' in result ? result.cycle ?? fund.currentCycle : fund.currentCycle} recipient: {payeeName}.</p>
+              </>
+            )}
             <p className="break-all">Ref: {externalref}</p>
             <p className="text-secondary">Powered by Moolre.</p>
           </div>
           <Link href={`/funds/${fundId}`} className="cp-btn-primary w-full">Done</Link>
         </div>
       ) : step === 'error' ? (
-        <div className="cp-card p-6 sm:p-8 space-y-6 text-center">
+        <div className="cp-card p-5 sm:p-6 space-y-6 text-center">
           <div className="mx-auto h-16 w-16 rounded-full bg-destructive/10 flex items-center justify-center">
             <AlertCircle className="h-9 w-9 text-destructive" />
           </div>
@@ -128,7 +159,7 @@ function PayInner() {
           </div>
         </div>
       ) : step === 'processing' ? (
-        <div className="cp-card p-8 space-y-4 text-center">
+        <div className="cp-card p-6 space-y-4 text-center">
           <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
           <div>
             <h1 className="text-xl font-semibold text-foreground">Confirming your payment…</h1>
@@ -136,7 +167,7 @@ function PayInner() {
           </div>
         </div>
       ) : step === 'otp' ? (
-        <div className="cp-card p-6 sm:p-8 space-y-6">
+        <div className="cp-card p-5 sm:p-6 space-y-6">
           <div className="text-center space-y-2">
             <div className="mx-auto h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center">
               <ShieldCheck className="h-7 w-7 text-primary" />
@@ -144,13 +175,7 @@ function PayInner() {
             <h1 className="text-2xl font-semibold text-foreground">Approve on your phone</h1>
             <p className="text-sm text-secondary">Enter the MoMo OTP / voucher code to authorise {formatGhs(total)}.</p>
           </div>
-          <input
-            inputMode="numeric"
-            value={otp}
-            onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 8))}
-            placeholder="Enter code"
-            className="cp-input text-center tracking-widest text-lg"
-          />
+          <OtpInput value={otp} onChange={setOtp} autoFocus ariaLabel="MoMo OTP / voucher code" />
           <button
             onClick={() => submit(otp)}
             disabled={otp.length < 4 || busy}
@@ -168,8 +193,8 @@ function PayInner() {
                 <span className="text-sm font-bold text-primary">GHS</span>
               </div>
               <div>
-                <p className="text-4xl font-bold text-foreground">{formatGhs(amount, { withSymbol: false })}</p>
-                <p className="text-sm text-secondary mt-1">Susu contribution · Cycle {fund.currentCycle} of {fund.totalCycles}</p>
+                <p className="text-3xl font-bold text-foreground">{formatGhs(amount, { withSymbol: false })}</p>
+                <p className="text-sm text-secondary mt-1">{isDeposit ? 'Security deposit' : `Susu contribution · Cycle ${fund.currentCycle} of ${fund.totalCycles}`}</p>
               </div>
             </div>
 
@@ -177,8 +202,8 @@ function PayInner() {
 
             <div className="space-y-3 text-sm">
               <Row label="Fund" value={fund.name} />
-              <Row label="This cycle's recipient" value={payeeName} />
-              <Row label="Platform fee" value={formatGhs(fee)} />
+              {!isDeposit && <Row label="This cycle's recipient" value={payeeName} />}
+              {!isDeposit && <Row label="Platform fee" value={formatGhs(fee)} />}
               <div className="flex items-center justify-between pt-3 border-t border-border">
                 <span className="font-medium text-foreground">Total</span>
                 <span className="font-bold text-foreground">{formatGhs(total)}</span>
@@ -200,15 +225,17 @@ function PayInner() {
             <div className="flex items-start gap-2 rounded-lg bg-primary/5 p-3">
               <ShieldCheck className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
               <p className="text-xs text-secondary leading-relaxed">
-                Secured by Moolre. Collected and paid out the same cycle — CirclePay never holds your savings.
+                {isDeposit
+                  ? 'Secured by Moolre. Your deposit is held as a safety buffer for the circle.'
+                  : 'Secured by Moolre. Collected and paid out the same cycle — CirclePay never holds your savings.'}
               </p>
             </div>
 
             <div className="flex gap-3">
-              <Link href={`/funds/${fundId}`} className="flex-1 h-12 rounded-full border border-border text-foreground font-medium hover:bg-muted transition-colors flex items-center justify-center">
+              <Link href={`/funds/${fundId}`} className="cp-btn-ghost flex-1">
                 Cancel
               </Link>
-              <button onClick={() => submit()} disabled={busy} className="flex-1 h-12 rounded-full bg-primary text-primary-foreground font-semibold hover:bg-primary/90 disabled:opacity-70 transition-colors flex items-center justify-center">
+              <button onClick={() => submit()} disabled={busy} className="cp-btn-primary flex-1 disabled:opacity-70">
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : `Confirm ${formatGhs(total)}`}
               </button>
             </div>

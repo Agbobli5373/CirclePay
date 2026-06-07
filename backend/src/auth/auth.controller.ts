@@ -11,7 +11,7 @@ import {
 } from '@nestjs/swagger'
 import type { Request, Response } from 'express'
 import { AuthService } from './auth.service'
-import { RequestOtpDto, VerifyOtpDto, SetPinDto, LoginDto, UpdateProfileDto } from './dto/auth.dto'
+import { RequestOtpDto, VerifyOtpDto, SetPinDto, LoginDto, UpdateProfileDto, ChangePinDto, ResetPinDto } from './dto/auth.dto'
 import { OkResponseDto, VerifyOtpResponseDto, MeResponseDto } from './dto/auth-responses.dto'
 import { JwtAuthGuard } from '../common/auth/jwt-auth.guard'
 import { CurrentUser } from '../common/auth/current-user.decorator'
@@ -22,6 +22,9 @@ function regCookie(req: Request): string | undefined {
 }
 function refreshCookie(req: Request): string | undefined {
   return (req as Request & { cookies?: Record<string, string> }).cookies?.refresh_token
+}
+function resetCookie(req: Request): string | undefined {
+  return (req as Request & { cookies?: Record<string, string> }).cookies?.reset_token
 }
 
 @ApiTags('auth')
@@ -70,6 +73,20 @@ export class AuthController {
     return this.auth.login(dto, res)
   }
 
+  @Post('reset-pin')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Set a new PIN from a verified reset OTP; clears lockout + issues a session' })
+  @ApiOkResponse({ type: OkResponseDto })
+  @ApiUnauthorizedResponse({ description: 'RESET_TOKEN_INVALID — restart the PIN reset' })
+  @ApiBadRequestResponse({ description: 'PIN validation failed (trivial/mismatch)' })
+  resetPin(
+    @Body() dto: ResetPinDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.auth.resetPin(resetCookie(req), dto, res)
+  }
+
   @Post('refresh')
   @HttpCode(200)
   @ApiOperation({ summary: 'Rotate the session using the refresh cookie' })
@@ -105,5 +122,17 @@ export class AuthController {
   @ApiUnauthorizedResponse({ description: 'No/invalid session' })
   updateMe(@CurrentUser() user: AuthUser, @Body() dto: UpdateProfileDto) {
     return this.auth.updateProfile(user, dto)
+  }
+
+  @Patch('pin')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  @ApiCookieAuth('access_token')
+  @ApiOperation({ summary: 'Change the current user PIN (verify current, set new)' })
+  @ApiOkResponse({ type: OkResponseDto })
+  @ApiUnauthorizedResponse({ description: 'PIN_INVALID — wrong current PIN' })
+  @ApiBadRequestResponse({ description: 'PIN validation failed (trivial/unchanged/mismatch)' })
+  changePin(@CurrentUser() user: AuthUser, @Body() dto: ChangePinDto) {
+    return this.auth.changePin(user, dto)
   }
 }

@@ -19,6 +19,12 @@ export class VerifyOtpResponseDto {
     description: 'true → session issued (returning user); false → reg-token issued, call set-pin.',
   })
   registered!: boolean
+
+  @ApiPropertyOptional({
+    example: true,
+    description: 'Only for purpose=reset: true → reset-token issued, call reset-pin (no session yet).',
+  })
+  reset?: boolean
 }
 
 class TrustSummaryDto {

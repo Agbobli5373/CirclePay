@@ -1,0 +1,19 @@
+{
+  "skill_name": "premium-ui",
+  "evals": [
+    {
+      "id": 0,
+      "name": "activity-page-premium",
+      "prompt": "The Activity page (frontend/app/activity/page.tsx) feels plain and a bit cheap. Redesign it to feel premium and Apple-quality — better hierarchy, spacing, and typography. Keep the existing data and behavior.",
+      "expected_output": "Edited activity page that reads as more premium: clearer hierarchy, consistent spacing rhythm, refined rows, designed empty/loading states, one accent — all using the existing cp-* tokens (no new colors/gradients/heavy shadows). Brief rationale.",
+      "files": ["frontend/app/activity/page.tsx"]
+    },
+    {
+      "id": 1,
+      "name": "profile-page-polish",
+      "prompt": "Polish the Profile page (frontend/app/profile/page.tsx) so it feels more refined and premium — tighten the layout, typography, and spacing. Don't change what it does.",
+      "expected_output": "Edited profile page with sharper type hierarchy, an 8pt spacing rhythm, hairline structure, calm single-accent color, proper states — consistent with the CirclePay design system. Brief rationale.",
+      "files": ["frontend/app/profile/page.tsx"]
+    }
+  ]
+}

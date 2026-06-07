@@ -141,7 +141,22 @@ export interface SmsInput {
   messages: SmsMessage[]
 }
 
-export class MoolreClient {
+/**
+ * The surface MoolreService depends on. Implemented by the real {@link MoolreClient}
+ * and by the dev-only MockMoolreClient (see moolre.mock.ts), so the service can swap
+ * one for the other behind a single env flag without any other code changing.
+ */
+export interface MoolreClientLike {
+  collect(input: CollectInput): Promise<CollectResult>
+  transfer(input: TransferInput): Promise<MoolreResponse<TransferData>>
+  getStatus(id: string, idtype?: '1' | '2'): Promise<MoolreResponse<StatusData>>
+  isSettled(externalref: string): Promise<boolean>
+  getBalance(): Promise<MoolreResponse<BalanceData>>
+  listTransactions(opts?: { startdate?: string; enddate?: string; limit?: number; status?: number }): Promise<MoolreResponse<unknown>>
+  sendSms(input: SmsInput): Promise<MoolreResponse<null>>
+}
+
+export class MoolreClient implements MoolreClientLike {
   constructor(private readonly config: MoolreConfig) {}
 
   static fromEnv(env?: NodeJS.ProcessEnv): MoolreClient {

@@ -20,10 +20,16 @@ export interface RegClaims {
   phase: 'set-pin'
   typ: 'reg'
 }
+export interface ResetClaims {
+  phone: string
+  phase: 'reset-pin'
+  typ: 'reset'
+}
 
 const ACCESS_COOKIE = 'access_token'
 const REFRESH_COOKIE = 'refresh_token'
 const REG_COOKIE = 'reg_token'
+const RESET_COOKIE = 'reset_token'
 
 /**
  * Issues/verifies JWTs and manages refresh-sessions in Redis.
@@ -81,6 +87,26 @@ export class TokenService {
       return claims
     } catch {
       throw new UnauthorizedException({ code: 'REG_TOKEN_INVALID', message: 'Restart onboarding' })
+    }
+  }
+
+  // ---- Reset token (between a verified `purpose:'reset'` OTP and reset-pin) ----
+
+  signResetToken(phone: string): string {
+    const claims: ResetClaims = { phone, phase: 'reset-pin', typ: 'reset' }
+    return this.jwt.sign(claims, {
+      secret: this.accessSecret,
+      expiresIn: this.ttl('RESET_TOKEN_TTL', '10m'),
+    })
+  }
+
+  verifyResetToken(token: string): ResetClaims {
+    try {
+      const claims = this.jwt.verify<ResetClaims>(token, { secret: this.accessSecret })
+      if (claims.typ !== 'reset' || claims.phase !== 'reset-pin') throw new Error('bad reset token')
+      return claims
+    } catch {
+      throw new UnauthorizedException({ code: 'RESET_TOKEN_INVALID', message: 'Restart the PIN reset' })
     }
   }
 
@@ -154,12 +180,21 @@ export class TokenService {
     this.clearCookie(res, ACCESS_COOKIE)
     this.clearCookie(res, REFRESH_COOKIE)
     this.clearCookie(res, REG_COOKIE)
+    this.clearCookie(res, RESET_COOKIE)
   }
 
   // ---- Cookie helpers ----
 
   setRegCookie(res: Response, token: string): void {
     this.setCookie(res, REG_COOKIE, token, 10 * 60 * 1000)
+  }
+
+  setResetCookie(res: Response, token: string): void {
+    this.setCookie(res, RESET_COOKIE, token, 10 * 60 * 1000)
+  }
+
+  clearResetCookie(res: Response): void {
+    this.clearCookie(res, RESET_COOKIE)
   }
 
   private setCookie(res: Response, name: string, value: string, maxAgeMs?: number): void {

@@ -8,7 +8,7 @@ import { phoneSchema } from './auth-schemas'
  */
 
 export const frequencySchema = z.enum(['weekly', 'monthly'])
-export const susuPayoutRuleSchema = z.enum(['rotating', 'random', 'trust_ordered'])
+export const susuPayoutRuleSchema = z.enum(['rotating', 'random', 'trust_ordered', 'manual'])
 
 /** Create a Susu fund. memberCount drives totalCycles (one cycle per member). */
 export const createSusuFundSchema = z
@@ -36,5 +36,24 @@ export const inviteMembersSchema = z.object({
   phones: z.array(phoneSchema).min(1, 'Add at least one number').max(50),
 })
 
+/** Initiate a member's security-deposit collection via MoMo (with OTP). */
+export const initiateDepositSchema = z.object({
+  fundId: z.string().min(1),
+  otpcode: z.string().regex(/^\d{6}$/, 'Enter the 6-digit code').optional(),
+})
+
+/** Resize a Susu's member count before it starts (organizer-only). */
+export const setMemberCountSchema = z.object({
+  memberCount: z.number().int().min(2, 'A Susu needs at least 2 members').max(50, 'Max 50 members'),
+})
+
+/** Arrange / reorder the payout order — the full ordered list of member userIds. */
+export const reorderPayoutSchema = z.object({
+  order: z.array(z.string().min(1)).min(2, 'Order needs at least 2 members').max(50),
+})
+
 export type CreateSusuFundInput = z.infer<typeof createSusuFundSchema>
 export type InviteMembersInput = z.infer<typeof inviteMembersSchema>
+export type InitiateDepositInput = z.infer<typeof initiateDepositSchema>
+export type SetMemberCountInput = z.infer<typeof setMemberCountSchema>
+export type ReorderPayoutInput = z.infer<typeof reorderPayoutSchema>

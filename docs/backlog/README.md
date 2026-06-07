@@ -72,21 +72,24 @@ E7/E8 full medical payouts (escrow + receipt-gated tranches) · E9 Activity & no
 
 ## Status (as built — consolidation checkpoint)
 
-- **Done & verified:** E0, E1, E2, E3, E4, E5, **E6** (trust moat), plus the frontend Susu hero-loop wiring (onboarding, funds, create, pay, activity, profile) and name capture. Backend ~115 tests green.
-- **Deferred (the next epics):** shortfall coverage (deposit/safety-pool consumption + `ShortfallCovered`) and **deposit collection** itself (`requiresDeposit` is rejected at create for now); **reconciliation cron** + reading the real `moolre_fee` (E12/E13); **EM** Medical MVP; **E10** USSD; **E11** AI advisor.
-- **Not yet proven:** a real Moolre sandbox collect/transfer (no live creds yet) — the money path is verified via seeded settlement events + unit tests.
+- **Done & verified:** E0, E1, E2, E3, E4, E5, **E6** (trust moat), **EM Medical MVP** (create → public donate → ops verify → payout), plus the full frontend wiring (onboarding, funds, create, pay, activity, profile, invitations bell, public `/f/[slug]` donate page, in-app `/fundraisers/[id]`) and name capture. Backend tests green.
+- **Consolidation phase additions (built since the EM checkpoint):** medical `individual_cash` route (organizer releases to a person's MoMo **without** the ops-verification gate; hospital routes keep it); **multi-tranche release** (release the available delta any time — no longer auto-completes the fund) + an explicit **Close**; organizer can **invite family & friends** to contribute (SMS), **remind** non-givers, and send a **bulk thank-you** SMS (Ghanaian copy, de-duped); **Change PIN** (`PATCH /auth/pin`); unified **Funds** list (Susu + medical in one grid with type/status filter, sort, and client-side "Load more"); on-brand `SelectMenu`/`ConfirmDialog` (no native dialogs); premium landing page.
+- **Dev mock Moolre:** `MOOLRE_MOCK_ENABLED=true` runs an in-process fake that self-settles collect/transfer via the real webhook pipeline — the whole money path (Susu + Medical) is now testable locally without live Moolre. Hard-guarded off in production.
+- **Deferred (the next epics):** **deposit collection** (`requiresDeposit` is rejected at create for now → `DEPOSIT_NOT_SUPPORTED`) and **shortfall coverage** (deposit/safety-pool consumption + `ShortfallCovered`) that depends on it; **forgot-PIN reset** (only authenticated Change-PIN exists today); medical **receipt-gated tranches + donor refunds + escrow formalization** (E7-S3/S4 — note `individual_cash` + tranche release are now built); **reconciliation cron** + reading the real `moolre_fee` (E12/E13); **E10** USSD; **E11** AI advisor. → **The near-term plan to close these sits in [`PHASE-2-gap-closing.md`](./PHASE-2-gap-closing.md).**
+- **Not yet proven:** a real Moolre **live** collect/transfer — API access isn't activated on the account yet (`AIN04`). The money path is verified via the mock + seeded settlement events + unit tests; flip `MOOLRE_MOCK_ENABLED=false` once Moolre activates API access.
 
 ## Known frontend placeholders (intentional, tracked)
 
 These ship as mock/stub UI until their epic lands — left as-is deliberately:
-- **Pools** (`/pools`) — mock; no backend concept (overlaps with Funds). Revisit or retire.
+- **Pools** (`/pools`) — mock; no backend concept (overlaps with Funds). Retire or relabel → **PHASE-2-S2**.
 - **AI Advisor** (`/advisor`, linked from Home + Create) — scripted stub → **E11**.
-- **Medical** (`/funds/kofi-mensah`, `/f/kofi-mensah`, the Medical branch of `/create`) — mock/orphaned → **EM** (create currently toasts "coming soon").
-- Dead notification bell; dead `funds.list('all')` branch (list is mine-only) — trivial future tidy.
+- ~~Medical mock pages~~ — **shipped** (EM): real `/f/[slug]` + `/fundraisers/[id]`; the kofi-mensah mocks were removed and create now posts to the backend.
+- ~~Dead notification bell~~ — **shipped**: the bell now surfaces pending invitations. Dead `funds.list('all')` branch (list is mine-only) remains a trivial future tidy.
 
 ## Suggested sequencing & milestones
 
 1. **Milestone 1 — Foundations:** E0, E1, E2. (Auth works; ledger + Moolre client wired to sandbox.)
 2. **Milestone 2 — Susu loop:** E3, E4, E5. (Create → contribute → payout, with SMS.)
 3. **Milestone 3 — Medical + demo polish:** EM, FE wiring, explainer assets.
-4. **Milestone 4 — Hardening:** pull from `BACKLOG-later.md` (defaults/appeals, ops, observability) as time allows.
+4. **Milestone 4 — Close the MVP gaps (next phase):** `PHASE-2-gap-closing.md` — honest surfaces (deposit/Pools dead-ends), account recovery (forgot-PIN), deposits → shortfall coverage, and the live-money cutover.
+5. **Milestone 5 — Hardening & depth:** pull from `BACKLOG-later.md` (full medical receipts/refunds, ops console, observability, i18n, USSD, AI advisor) as time allows.

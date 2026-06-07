@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import {
   MoolreClient,
+  MoolreClientLike,
   MoolreConfig,
   MoolreError,
   CollectInput,
@@ -9,6 +10,7 @@ import {
   TransferInput,
   SmsInput,
 } from './moolre.client'
+import { MockMoolreClient } from './moolre.mock'
 
 /**
  * Wraps the framework-agnostic MoolreClient as a Nest provider.
@@ -20,11 +22,30 @@ import {
 @Injectable()
 export class MoolreService implements OnModuleInit {
   private readonly logger = new Logger(MoolreService.name)
-  private client!: MoolreClient
+  private client!: MoolreClientLike
 
   constructor(private readonly config: ConfigService) {}
 
   onModuleInit(): void {
+    // DEV-ONLY mock — simulates Moolre (incl. self-firing the settlement webhook).
+    // Hard-guarded off in production regardless of the flag.
+    const mockEnabled =
+      this.config.get<string>('MOOLRE_MOCK_ENABLED') === 'true' &&
+      process.env.NODE_ENV !== 'production'
+    if (mockEnabled) {
+      const port = this.config.get<string>('PORT') ?? '4000'
+      const callbackBaseUrl =
+        this.config.get<string>('MOOLRE_MOCK_CALLBACK_BASE') ?? `http://127.0.0.1:${port}/api`
+      const settleDelayMs = Number(this.config.get<string>('MOOLRE_MOCK_SETTLE_MS') ?? 2500)
+      this.client = new MockMoolreClient({
+        callbackBaseUrl,
+        webhookSecret: this.config.get<string>('MOOLRE_WEBHOOK_SECRET') ?? '',
+        settleDelayMs,
+      })
+      this.logger.warn(`Moolre client ready → MOCK (dev only; self-settles in ${settleDelayMs}ms via ${callbackBaseUrl})`)
+      return
+    }
+
     const baseUrl =
       this.config.get<string>('MOOLRE_BASE_URL') ?? 'https://sandbox.moolre.com'
     const apiUser = this.config.get<string>('MOOLRE_API_USER')

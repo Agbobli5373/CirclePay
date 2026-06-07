@@ -1,4 +1,4 @@
-import { Body, Controller, Get, NotFoundException, Param, Post, UseGuards } from '@nestjs/common'
+import { Body, Controller, Delete, Get, NotFoundException, Param, Patch, Post, UseGuards } from '@nestjs/common'
 import {
   ApiTags,
   ApiCookieAuth,
@@ -15,11 +15,13 @@ import { JwtAuthGuard } from '../common/auth/jwt-auth.guard'
 import { CurrentUser } from '../common/auth/current-user.decorator'
 import type { AuthUser } from '../common/auth/auth-user'
 import { FundsService } from './funds.service'
-import { CreateFundDto, InviteMembersDto } from './dto/funds.dto'
+import { CreateFundDto, InviteMembersDto, SetMemberCountDto, ReorderPayoutDto } from './dto/funds.dto'
 import {
   FundSummaryDto,
   FundDetailDto,
   InviteResultDto,
+  InviteDto,
+  MyInviteDto,
   JoinResultDto,
 } from './dto/funds-responses.dto'
 
@@ -49,6 +51,48 @@ export class FundsController {
     return this.funds.invite(user.id, id, dto)
   }
 
+  @Get(':id/invites')
+  @ApiOperation({ summary: "List a fund's invites with status + shareable join links (admin only)" })
+  @ApiOkResponse({ type: [InviteDto] })
+  @ApiForbiddenResponse({ description: 'FORBIDDEN — admin only' })
+  listInvites(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.funds.listInvites(user.id, id)
+  }
+
+  @Post(':id/invites/:inviteId/resend')
+  @ApiOperation({ summary: 'Resend a pending invite SMS (admin only)' })
+  @ApiOkResponse({ description: '{ ok: true }' })
+  @ApiForbiddenResponse({ description: 'FORBIDDEN — admin only / Susu started' })
+  @ApiNotFoundResponse({ description: 'INVITE_NOT_FOUND' })
+  resendInvite(@CurrentUser() user: AuthUser, @Param('id') id: string, @Param('inviteId') inviteId: string) {
+    return this.funds.resendInvite(user.id, id, inviteId)
+  }
+
+  @Delete(':id/invites/:inviteId')
+  @ApiOperation({ summary: 'Revoke an invite, freeing the seat (admin only)' })
+  @ApiOkResponse({ description: '{ ok: true }' })
+  @ApiForbiddenResponse({ description: 'FORBIDDEN — admin only' })
+  @ApiNotFoundResponse({ description: 'INVITE_NOT_FOUND' })
+  revokeInvite(@CurrentUser() user: AuthUser, @Param('id') id: string, @Param('inviteId') inviteId: string) {
+    return this.funds.revokeInvite(user.id, id, inviteId)
+  }
+
+  @Get('invites/mine')
+  @ApiOperation({ summary: 'Pending invites addressed to me (in-app invitation inbox)' })
+  @ApiOkResponse({ type: [MyInviteDto] })
+  myInvites(@CurrentUser() user: AuthUser) {
+    return this.funds.myInvites(user.id)
+  }
+
+  @Post('invites/:inviteId/decline')
+  @ApiOperation({ summary: 'Decline an invite addressed to me (frees the seat)' })
+  @ApiOkResponse({ description: '{ ok: true }' })
+  @ApiForbiddenResponse({ description: 'INVITE_PHONE_MISMATCH — invite was sent to a different number' })
+  @ApiNotFoundResponse({ description: 'INVITE_NOT_FOUND' })
+  declineInvite(@CurrentUser() user: AuthUser, @Param('inviteId') inviteId: string) {
+    return this.funds.declineInvite(user.id, inviteId)
+  }
+
   @Post('join/:token')
   @ApiOperation({ summary: 'Accept a Susu invite by token (invite-only join)' })
   @ApiOkResponse({ type: JoinResultDto })
@@ -57,6 +101,36 @@ export class FundsController {
   @ApiNotFoundResponse({ description: 'INVITE_INVALID — bad or expired invite link' })
   acceptInvite(@CurrentUser() user: AuthUser, @Param('token') token: string) {
     return this.funds.acceptInvite(user.id, token)
+  }
+
+  @Post(':id/start')
+  @ApiOperation({ summary: 'Start the Susu now with whoever has joined (organizer only)' })
+  @ApiOkResponse({ description: '{ ok: true }' })
+  @ApiForbiddenResponse({ description: 'NOT_ORGANIZER' })
+  @ApiConflictResponse({ description: 'ALREADY_STARTED / FUND_INACTIVE' })
+  @ApiBadRequestResponse({ description: 'TOO_FEW_MEMBERS — need at least 2 members' })
+  start(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.funds.startNow(user.id, id)
+  }
+
+  @Patch(':id/member-count')
+  @ApiOperation({ summary: 'Resize the circle before it starts (organizer only)' })
+  @ApiOkResponse({ description: '{ ok: true, memberCount }' })
+  @ApiForbiddenResponse({ description: 'NOT_ORGANIZER' })
+  @ApiConflictResponse({ description: 'ALREADY_STARTED — can only resize before start' })
+  @ApiBadRequestResponse({ description: "TOO_SMALL — below the members already in" })
+  setMemberCount(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: SetMemberCountDto) {
+    return this.funds.setMemberCount(user.id, id, dto.memberCount)
+  }
+
+  @Patch(':id/payout-order')
+  @ApiOperation({ summary: 'Arrange / reorder the payout order — strictly-future cycles during a run (organizer only)' })
+  @ApiOkResponse({ description: '{ ok: true }' })
+  @ApiForbiddenResponse({ description: 'NOT_ORGANIZER' })
+  @ApiConflictResponse({ description: 'LOCKED_POSITION — already-paid/current cycle frozen / FUND_INACTIVE' })
+  @ApiBadRequestResponse({ description: 'INVALID_ORDER — must list each current member once' })
+  arrangePayoutOrder(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ReorderPayoutDto) {
+    return this.funds.arrangePayoutOrder(user.id, id, dto.order)
   }
 
   @Post(':id/dev/expire')
