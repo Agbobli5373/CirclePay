@@ -482,6 +482,8 @@ export class FundsService {
       currentCyclePayoutStatus: payout?.status ?? 'none',
       pendingInviteCount,
       openSeats: Math.max(0, fund.susu.memberCount - fund.members.length - pendingInviteCount),
+      requiresDeposit: fund.susu.requiresDeposit,
+      depositAmount: fund.susu.depositAmount,
     }
   }
 

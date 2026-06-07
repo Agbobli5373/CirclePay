@@ -51,6 +51,7 @@ export default function SusuFundPage() {
 
   const iPaid = myMember?.status === 'paid'
   const canPay = fund.started && !!myMember && !iPaid && fund.status === 'active'
+  const iOweDeposit = fund.requiresDeposit && !!myMember && !myMember.depositPaid && fund.status === 'active'
   const pct = fund.progressPercent
   const cyclePaidPct = fund.memberCount > 0 ? Math.round((fund.thisCycleFundedCount / fund.memberCount) * 100) : 0
 
@@ -75,6 +76,16 @@ export default function SusuFundPage() {
                 A missed contribution locked you across all of CirclePay. Pay what you owe or contact support to appeal.
               </p>
             </div>
+          </div>
+        )}
+
+        {iOweDeposit && (
+          <div className="cp-card p-4 flex items-center justify-between gap-3 border-primary/30 bg-primary/5">
+            <div className="text-sm min-w-0">
+              <p className="font-semibold text-foreground">Security deposit due</p>
+              <p className="text-secondary mt-0.5">Pay your {formatGhs(fund.depositAmount)} deposit to secure your seat. It covers a missed turn so the payee is always paid.</p>
+            </div>
+            <Link href={`/pay?fund=${fund.id}&kind=deposit`} className="cp-btn-primary shrink-0">Pay deposit</Link>
           </div>
         )}
 
@@ -144,6 +155,11 @@ export default function SusuFundPage() {
                       {me && m.userId === me.id ? 'You' : m.name || 'Member'}
                       {m.role === 'admin' && <span className="ml-2 cp-pill">Admin</span>}
                     </p>
+                    {fund.requiresDeposit && (
+                      <span className={`ml-auto shrink-0 text-xs font-medium px-2 py-0.5 rounded-full ${m.depositPaid ? 'bg-primary/10 text-primary' : 'bg-amber-500/15 text-amber-600'}`}>
+                        {m.depositPaid ? 'Deposit paid' : 'Deposit due'}
+                      </span>
+                    )}
                   </div>
                 ))}
                 {Array.from({ length: pendingInvites }).map((_, i) => (

@@ -118,6 +118,8 @@ export interface FundDetail extends FundSummary {
   currentCyclePayoutStatus: string
   pendingInviteCount: number
   openSeats: number
+  requiresDeposit: boolean
+  depositAmount: number
 }
 
 export interface Invite {
@@ -174,6 +176,21 @@ export interface ContributionStatus {
   status: 'initiated' | 'settled' | 'failed'
   transactionId: string | null
   settledAt: string | null
+}
+
+export type DepositState = 'otp_required' | 'initiated' | 'settled' | 'failed'
+export interface DepositResult {
+  state: DepositState
+  externalref: string
+  amount: number
+  fundId: string
+}
+export interface DepositStatus {
+  externalref: string
+  fundId: string
+  amount: number
+  status: 'initiated' | 'settled'
+  depositPaid: boolean
 }
 
 // ----- Medical fundraising (EM) -----
@@ -316,6 +333,16 @@ export const api = {
       }),
     status: (externalref: string) =>
       request<ContributionStatus>(`/contributions/${encodeURIComponent(externalref)}`),
+  },
+  deposits: {
+    initiate: (fundId: string, idempotencyKey: string, otpcode?: string) =>
+      request<DepositResult>('/deposits', {
+        method: 'POST',
+        body: otpcode ? { fundId, otpcode } : { fundId },
+        idempotencyKey,
+      }),
+    status: (externalref: string) =>
+      request<DepositStatus>(`/deposits/${encodeURIComponent(externalref)}`),
   },
   activity: {
     list: () => request<ActivityItem[]>('/activity'),

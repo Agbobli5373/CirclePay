@@ -106,6 +106,12 @@ export class FundDetailDto extends FundSummaryDto {
 
   @ApiProperty({ example: 1, description: 'Seats free to invite into = memberCount − members − pendingInvites.' })
   openSeats!: number
+
+  @ApiProperty({ example: false, description: 'Whether members must pay a security deposit on joining.' })
+  requiresDeposit!: boolean
+
+  @ApiProperty({ example: 0, description: 'Security deposit per member, pesewas (0 when not required).' })
+  depositAmount!: number
 }
 
 /** Result of inviting members. */

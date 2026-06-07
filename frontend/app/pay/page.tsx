@@ -8,7 +8,7 @@ import { Logo } from '@/components/logo'
 import { OtpInput } from '@/components/otp-input'
 import { ShieldCheck, CheckCircle2, X, Loader2, AlertCircle } from 'lucide-react'
 import { formatGhs } from '@circlepay/shared'
-import { api, ApiError, type ContributionResult } from '@/lib/api'
+import { api, ApiError, type ContributionResult, type DepositResult } from '@/lib/api'
 import { useFund, useMe } from '@/lib/queries'
 
 type Step = 'confirm' | 'otp' | 'processing' | 'success' | 'error'
@@ -20,6 +20,7 @@ function newKey() {
 function PayInner() {
   const params = useSearchParams()
   const fundId = params.get('fund') ?? ''
+  const isDeposit = params.get('kind') === 'deposit'
   const { data: me } = useMe()
   const { data: fund, isLoading } = useFund(fundId)
 
@@ -27,15 +28,16 @@ function PayInner() {
   const [idemKey, setIdemKey] = useState(newKey)
   const [otp, setOtp] = useState('')
   const [busy, setBusy] = useState(false)
-  const [result, setResult] = useState<ContributionResult | null>(null)
+  const [result, setResult] = useState<ContributionResult | DepositResult | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
 
   const externalref = result?.externalref ?? null
 
   // Poll settlement once initiated.
   const { data: poll } = useQuery({
-    queryKey: ['contrib', externalref],
-    queryFn: () => api.contributions.status(externalref as string),
+    queryKey: [isDeposit ? 'deposit' : 'contrib', externalref],
+    queryFn: (): Promise<{ status: string }> =>
+      isDeposit ? api.deposits.status(externalref as string) : api.contributions.status(externalref as string),
     enabled: !!externalref && step === 'processing',
     refetchInterval: (q) =>
       q.state.data?.status === 'settled' || q.state.data?.status === 'failed' ? false : 2000,
@@ -53,7 +55,9 @@ function PayInner() {
   async function submit(otpcode?: string) {
     setBusy(true)
     try {
-      const res = await api.contributions.initiate(fundId, idemKey, otpcode)
+      const res = isDeposit
+        ? await api.deposits.initiate(fundId, idemKey, otpcode)
+        : await api.contributions.initiate(fundId, idemKey, otpcode)
       setResult(res)
       if (res.state === 'otp_required') setStep('otp')
       else if (res.state === 'settled') setStep('success')
@@ -86,9 +90,9 @@ function PayInner() {
   }
 
   const payeeName = fund.currentPayeeUserId === me?.id ? 'You' : fund.members.find((m) => m.userId === fund.currentPayeeUserId)?.name || 'Member'
-  const amount = result?.amount ?? fund.contribution
-  const fee = result?.fee ?? 0
-  const total = result?.total ?? amount + fee
+  const amount = result?.amount ?? (isDeposit ? fund.depositAmount : fund.contribution)
+  const fee = !isDeposit && result && 'fee' in result ? result.fee : 0
+  const total = !isDeposit && result && 'total' in result ? result.total : amount
   const maskedNumber = me ? `0${me.phone.slice(4, 6)} ••• ••${me.phone.slice(-2)}` : ''
 
   return (
@@ -100,15 +104,21 @@ function PayInner() {
               <CheckCircle2 className="h-9 w-9 text-primary" />
             </div>
             <div>
-              <h1 className="text-2xl font-semibold text-foreground">Payment sent</h1>
-              <p className="text-sm text-secondary mt-1">{formatGhs(total)} paid to {fund.name}</p>
+              <h1 className="text-2xl font-semibold text-foreground">{isDeposit ? 'Deposit paid' : 'Payment sent'}</h1>
+              <p className="text-sm text-secondary mt-1">{formatGhs(total)} {isDeposit ? 'deposit to' : 'paid to'} {fund.name}</p>
             </div>
           </div>
           <div className="rounded-xl bg-muted/50 border border-border p-4 space-y-2 font-mono text-xs text-foreground">
             <p className="text-secondary">CirclePay · MoMo receipt</p>
-            <p>Paid {formatGhs(amount)} to {fund.name}.</p>
-            <p>Fee {formatGhs(fee)}. Total {formatGhs(total)}.</p>
-            <p>Cycle {result?.cycle ?? fund.currentCycle} recipient: {payeeName}.</p>
+            {isDeposit ? (
+              <p>Security deposit {formatGhs(amount)} for {fund.name}.</p>
+            ) : (
+              <>
+                <p>Paid {formatGhs(amount)} to {fund.name}.</p>
+                <p>Fee {formatGhs(fee)}. Total {formatGhs(total)}.</p>
+                <p>Cycle {result && 'cycle' in result ? result.cycle ?? fund.currentCycle : fund.currentCycle} recipient: {payeeName}.</p>
+              </>
+            )}
             <p className="break-all">Ref: {externalref}</p>
             <p className="text-secondary">Powered by Moolre.</p>
           </div>
@@ -164,7 +174,7 @@ function PayInner() {
               </div>
               <div>
                 <p className="text-3xl font-bold text-foreground">{formatGhs(amount, { withSymbol: false })}</p>
-                <p className="text-sm text-secondary mt-1">Susu contribution · Cycle {fund.currentCycle} of {fund.totalCycles}</p>
+                <p className="text-sm text-secondary mt-1">{isDeposit ? 'Security deposit' : `Susu contribution · Cycle ${fund.currentCycle} of ${fund.totalCycles}`}</p>
               </div>
             </div>
 
@@ -172,8 +182,8 @@ function PayInner() {
 
             <div className="space-y-3 text-sm">
               <Row label="Fund" value={fund.name} />
-              <Row label="This cycle's recipient" value={payeeName} />
-              <Row label="Platform fee" value={formatGhs(fee)} />
+              {!isDeposit && <Row label="This cycle's recipient" value={payeeName} />}
+              {!isDeposit && <Row label="Platform fee" value={formatGhs(fee)} />}
               <div className="flex items-center justify-between pt-3 border-t border-border">
                 <span className="font-medium text-foreground">Total</span>
                 <span className="font-bold text-foreground">{formatGhs(total)}</span>
@@ -195,7 +205,9 @@ function PayInner() {
             <div className="flex items-start gap-2 rounded-lg bg-primary/5 p-3">
               <ShieldCheck className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
               <p className="text-xs text-secondary leading-relaxed">
-                Secured by Moolre. Collected and paid out the same cycle — CirclePay never holds your savings.
+                {isDeposit
+                  ? 'Secured by Moolre. Your deposit is held as a safety buffer for the circle.'
+                  : 'Secured by Moolre. Collected and paid out the same cycle — CirclePay never holds your savings.'}
               </p>
             </div>
 
