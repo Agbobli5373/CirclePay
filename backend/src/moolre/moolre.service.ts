@@ -10,7 +10,7 @@ import {
   TransferInput,
   SmsInput,
 } from './moolre.client'
-import { MockMoolreClient } from './moolre.mock'
+import { MockMoolreClient, type MockScenario } from './moolre.mock'
 
 /**
  * Wraps the framework-agnostic MoolreClient as a Nest provider.
@@ -37,12 +37,17 @@ export class MoolreService implements OnModuleInit {
       const callbackBaseUrl =
         this.config.get<string>('MOOLRE_MOCK_CALLBACK_BASE') ?? `http://127.0.0.1:${port}/api`
       const settleDelayMs = Number(this.config.get<string>('MOOLRE_MOCK_SETTLE_MS') ?? 2500)
+      const scenario = this.config.get<string>('MOOLRE_MOCK_SCENARIO') as MockScenario | undefined
       this.client = new MockMoolreClient({
         callbackBaseUrl,
         webhookSecret: this.config.get<string>('MOOLRE_WEBHOOK_SECRET') ?? '',
         settleDelayMs,
+        scenario,
       })
-      this.logger.warn(`Moolre client ready → MOCK (dev only; self-settles in ${settleDelayMs}ms via ${callbackBaseUrl})`)
+      this.logger.warn(
+        `Moolre client ready → MOCK (dev only; self-settles in ${settleDelayMs}ms via ${callbackBaseUrl}` +
+          `${scenario && scenario !== 'happy' ? `; scenario=${scenario}` : ''})`,
+      )
       return
     }
 
