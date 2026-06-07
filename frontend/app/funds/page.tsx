@@ -9,6 +9,7 @@ import { useFunds, useMyFundraisers } from '@/lib/queries'
 import { formatGhs } from '@circlepay/shared'
 import type { FundSummary, MyFundraiser } from '@/lib/api'
 import { MedicalFundCard } from '@/components/medical-fund-card'
+import { SelectMenu } from '@/components/select-menu'
 
 function FundCard({ fund }: { fund: FundSummary }) {
   return (
@@ -95,7 +96,6 @@ export default function FundsPage() {
   }, [all, search, type, status, sort])
 
   const types: TypeFilter[] = ['all', 'Susu', 'Medical']
-  const selectCls = 'h-10 rounded-lg border border-border bg-card px-3 text-sm font-medium text-foreground focus:outline-none focus:border-primary cursor-pointer'
 
   return (
     <AppShell currentPage="funds">
@@ -140,16 +140,26 @@ export default function FundsPage() {
             ))}
           </div>
           <div className="flex items-center gap-2">
-            <select aria-label="Filter by status" value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)} className={selectCls}>
-              <option value="all">All statuses</option>
-              <option value="active">Active</option>
-              <option value="completed">Completed</option>
-            </select>
-            <select aria-label="Sort by" value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className={selectCls}>
-              <option value="recent">Newest</option>
-              <option value="name">Name (A–Z)</option>
-              <option value="progress">Most progress</option>
-            </select>
+            <SelectMenu
+              ariaLabel="Filter by status"
+              value={status}
+              onChange={setStatus}
+              options={[
+                { value: 'all', label: 'All statuses' },
+                { value: 'active', label: 'Active' },
+                { value: 'completed', label: 'Completed' },
+              ]}
+            />
+            <SelectMenu
+              ariaLabel="Sort by"
+              value={sort}
+              onChange={setSort}
+              options={[
+                { value: 'recent', label: 'Newest' },
+                { value: 'name', label: 'Name (A–Z)' },
+                { value: 'progress', label: 'Most progress' },
+              ]}
+            />
           </div>
         </div>
 
