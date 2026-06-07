@@ -278,7 +278,7 @@ export interface CreateSusuPayload {
   frequency: 'weekly' | 'monthly'
   memberCount: number
   startDate: string // ISO
-  payoutRule: 'rotating' | 'random' | 'trust_ordered'
+  payoutRule: 'rotating' | 'random' | 'trust_ordered' | 'manual'
   requiresDeposit: boolean
   depositAmount: number
 }
@@ -323,6 +323,11 @@ export const api = {
         `/funds/join/${encodeURIComponent(token)}`,
         { method: 'POST' },
       ),
+    start: (id: string) => request<{ ok: true }>(`/funds/${id}/start`, { method: 'POST' }),
+    setMemberCount: (id: string, memberCount: number) =>
+      request<{ ok: true; memberCount: number }>(`/funds/${id}/member-count`, { method: 'PATCH', body: { memberCount } }),
+    arrangePayoutOrder: (id: string, order: string[]) =>
+      request<{ ok: true }>(`/funds/${id}/payout-order`, { method: 'PATCH', body: { order } }),
   },
   contributions: {
     initiate: (fundId: string, idempotencyKey: string, otpcode?: string) =>

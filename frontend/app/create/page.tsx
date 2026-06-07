@@ -12,7 +12,7 @@ import { ApiError, type Network } from '@/lib/api'
 
 type FundType = 'Susu' | 'Medical'
 type Frequency = 'Weekly' | 'Monthly'
-type Payout = 'Rotating order' | 'Random draw'
+type Payout = 'Rotating order' | 'Random draw' | 'Arrange myself'
 
 function nextMonthValue() {
   const d = new Date()
@@ -101,7 +101,7 @@ export default function CreateFundPage() {
         frequency: frequency === 'Weekly' ? 'weekly' : 'monthly',
         memberCount: membersNum,
         startDate,
-        payoutRule: payout === 'Random draw' ? 'random' : 'rotating',
+        payoutRule: payout === 'Random draw' ? 'random' : payout === 'Arrange myself' ? 'manual' : 'rotating',
         requiresDeposit,
         depositAmount: requiresDeposit ? toPesewas(depositNum) : 0,
       })
@@ -480,12 +480,17 @@ export default function CreateFundPage() {
 
               <Field label="Payout rule">
                 <div className="grid grid-cols-2 gap-2">
-                  {(['Rotating order', 'Random draw'] as Payout[]).map((p) => (
+                  {(['Rotating order', 'Random draw', 'Arrange myself'] as Payout[]).map((p) => (
                     <Pill key={p} active={payout === p} onClick={() => setPayout(p)}>
                       {p}
                     </Pill>
                   ))}
                 </div>
+                {payout === 'Arrange myself' && (
+                  <p className="text-xs text-secondary mt-1.5 leading-relaxed">
+                    You&apos;ll set who&apos;s paid in which cycle on the fund page once members join — and can reshuffle upcoming turns anytime before they&apos;re paid.
+                  </p>
+                )}
               </Field>
 
               <Field label="Security deposit">

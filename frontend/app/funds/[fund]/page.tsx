@@ -3,9 +3,11 @@
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { AppShell } from '@/components/app-shell'
-import { CheckCircle2, AlertCircle, Clock, Loader2, UserPlus, UserCircle2, ChevronLeft } from 'lucide-react'
+import { CheckCircle2, AlertCircle, Clock, Loader2, UserPlus, UserCircle2, ChevronLeft, ArrowUp, ArrowDown, Lock, Minus, Plus } from 'lucide-react'
+import { toast } from 'sonner'
 import { formatGhs } from '@circlepay/shared'
-import { useFund, useMe } from '@/lib/queries'
+import { useFund, useMe, useStartFund, useSetMemberCount, useArrangePayoutOrder } from '@/lib/queries'
+import { ApiError } from '@/lib/api'
 import { InviteMembers } from '@/components/invite-members'
 
 export default function SusuFundPage() {
@@ -13,6 +15,9 @@ export default function SusuFundPage() {
   const fundId = params.fund
   const { data: me } = useMe()
   const { data: fund, isLoading, isError } = useFund(fundId)
+  const startFund = useStartFund(fundId)
+  const setMc = useSetMemberCount(fundId)
+  const arrange = useArrangePayoutOrder(fundId)
 
   if (isLoading) {
     return (
@@ -52,6 +57,20 @@ export default function SusuFundPage() {
   const iPaid = myMember?.status === 'paid'
   const canPay = fund.started && !!myMember && !iPaid && fund.status === 'active'
   const iOweDeposit = fund.requiresDeposit && !!myMember && !myMember.depositPaid && fund.status === 'active'
+
+  // Manual payout-order arranging (organizer): movable rows are strictly-future cycles;
+  // the first `lockedCount` (paid + current) are frozen. Pre-start everything is movable.
+  const orderIds: string[] = fund.payoutOrder ?? []
+  const canArrange = isAdmin && fund.status === 'active' && fund.payoutRule === 'manual'
+  const lockedCount = fund.started ? fund.currentCycle : 0
+  const reorderBusy = arrange.isPending
+  function moveOrder(from: number, to: number) {
+    if (to < lockedCount || to < 0 || to >= orderIds.length || reorderBusy) return
+    const next = [...orderIds]
+    const [x] = next.splice(from, 1)
+    next.splice(to, 0, x)
+    arrange.mutate(next, { onError: (e) => toast.error(e instanceof ApiError ? e.message : 'Could not reorder') })
+  }
   const pct = fund.progressPercent
   const cyclePaidPct = fund.memberCount > 0 ? Math.round((fund.thisCycleFundedCount / fund.memberCount) * 100) : 0
 
@@ -141,6 +160,49 @@ export default function SusuFundPage() {
                   <h2 className="text-lg font-semibold text-foreground">Invite & manage</h2>
                 </div>
                 <InviteMembers fundId={fund.id} fundName={fund.name} remaining={openSeats} />
+              </div>
+            )}
+
+            {/* Start & size (admin) — resize, arrange (manual), or start early */}
+            {isAdmin && (
+              <div className="cp-card p-5 space-y-5">
+                <h2 className="text-lg font-semibold text-foreground">Start &amp; size</h2>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Circle size</p>
+                    <p className="text-xs text-secondary">Adjust before it starts</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button type="button" aria-label="Fewer members" onClick={() => setMc.mutate(fund.memberCount - 1)} disabled={setMc.isPending || fund.memberCount <= Math.max(2, joined)} className="h-9 w-9 rounded-full border border-border flex items-center justify-center text-foreground hover:border-primary/40 disabled:opacity-40 transition-colors"><Minus className="h-4 w-4" /></button>
+                    <span className="text-lg font-bold tabular-nums w-8 text-center">{fund.memberCount}</span>
+                    <button type="button" aria-label="More members" onClick={() => setMc.mutate(fund.memberCount + 1)} disabled={setMc.isPending || fund.memberCount >= 50} className="h-9 w-9 rounded-full border border-border flex items-center justify-center text-foreground hover:border-primary/40 disabled:opacity-40 transition-colors"><Plus className="h-4 w-4" /></button>
+                  </div>
+                </div>
+
+                {canArrange && joined > 1 && (
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-foreground">Payout order</p>
+                    <p className="text-xs text-secondary">Use the arrows to set who gets paid first.</p>
+                    <div className="space-y-2">
+                      {orderIds.map((uid, i) => (
+                        <div key={uid} className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-2.5">
+                          <span className="h-7 w-7 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-foreground">{i + 1}</span>
+                          <span className="flex-1 min-w-0 text-sm font-medium text-foreground truncate">{nameFor(uid)}</span>
+                          <div className="flex items-center gap-1">
+                            <button type="button" aria-label="Move up" onClick={() => moveOrder(i, i - 1)} disabled={i === 0 || reorderBusy} className="h-7 w-7 rounded-md border border-border flex items-center justify-center disabled:opacity-30 hover:border-primary/40 transition-colors"><ArrowUp className="h-3.5 w-3.5" /></button>
+                            <button type="button" aria-label="Move down" onClick={() => moveOrder(i, i + 1)} disabled={i === orderIds.length - 1 || reorderBusy} className="h-7 w-7 rounded-md border border-border flex items-center justify-center disabled:opacity-30 hover:border-primary/40 transition-colors"><ArrowDown className="h-3.5 w-3.5" /></button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <button type="button" onClick={() => startFund.mutate(undefined, { onError: (e) => toast.error(e instanceof ApiError ? e.message : 'Could not start') })} disabled={startFund.isPending || joined < 2} className="cp-btn-primary w-full">
+                  {startFund.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : `Start now with ${joined} member${joined === 1 ? '' : 's'}`}
+                </button>
+                <p className="text-xs text-secondary text-center">Or wait — it starts automatically once all {fund.memberCount} seats fill.</p>
               </div>
             )}
 
@@ -295,10 +357,17 @@ export default function SusuFundPage() {
                         <p className="text-sm font-medium text-foreground">{isMe ? 'You' : nameFor(userId)}</p>
                         <p className="text-xs text-secondary">{formatGhs(fund.potPesewas)}</p>
                       </div>
-                      <div className="flex-shrink-0">
+                      <div className="flex-shrink-0 flex items-center gap-2">
                         {status === 'completed' && <span className="text-xs font-medium text-secondary">Completed</span>}
                         {status === 'current' && <span className="text-xs font-medium text-primary bg-primary/10 px-2 py-1 rounded">Current</span>}
                         {status === 'upcoming' && isMe && <span className="text-xs font-medium text-primary">Your turn</span>}
+                        {canArrange && status === 'upcoming' && (
+                          <div className="flex items-center gap-1">
+                            <button type="button" aria-label="Move up" onClick={() => moveOrder(i, i - 1)} disabled={i <= lockedCount || reorderBusy} className="h-7 w-7 rounded-md border border-border flex items-center justify-center disabled:opacity-30 hover:border-primary/40 transition-colors"><ArrowUp className="h-3.5 w-3.5" /></button>
+                            <button type="button" aria-label="Move down" onClick={() => moveOrder(i, i + 1)} disabled={i >= orderIds.length - 1 || reorderBusy} className="h-7 w-7 rounded-md border border-border flex items-center justify-center disabled:opacity-30 hover:border-primary/40 transition-colors"><ArrowDown className="h-3.5 w-3.5" /></button>
+                          </div>
+                        )}
+                        {canArrange && status !== 'upcoming' && <Lock className="h-3.5 w-3.5 text-secondary" aria-label="Locked — already paid" />}
                       </div>
                     </div>
                   )

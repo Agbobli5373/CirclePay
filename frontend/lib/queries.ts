@@ -77,6 +77,30 @@ export function useResendInvite(fundId: string) {
   return useMutation({ mutationFn: (inviteId: string) => api.funds.resendInvite(fundId, inviteId) })
 }
 
+export function useStartFund(fundId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.funds.start(fundId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.fund(fundId) }),
+  })
+}
+
+export function useSetMemberCount(fundId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (memberCount: number) => api.funds.setMemberCount(fundId, memberCount),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.fund(fundId) }),
+  })
+}
+
+export function useArrangePayoutOrder(fundId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (order: string[]) => api.funds.arrangePayoutOrder(fundId, order),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.fund(fundId) }),
+  })
+}
+
 export function useRevokeInvite(fundId: string) {
   const qc = useQueryClient()
   return useMutation({
