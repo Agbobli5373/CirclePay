@@ -15,6 +15,7 @@ import { FundraisersModule } from './fundraisers/fundraisers.module'
 import { PayoutsModule } from './payouts/payouts.module'
 import { ActivityModule } from './activity/activity.module'
 import { TrustModule } from './trust/trust.module'
+import { UssdModule } from './ussd/ussd.module'
 import { HealthModule } from './health/health.module'
 
 @Module({
@@ -35,6 +36,7 @@ import { HealthModule } from './health/health.module'
     ActivityModule,
     TrustModule,
     WebhooksModule,
+    UssdModule,
     HealthModule,
   ],
 })

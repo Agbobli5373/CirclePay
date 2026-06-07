@@ -11,5 +11,6 @@ import { JwtStrategy } from './jwt.strategy'
   imports: [PassportModule, JwtModule.register({})],
   controllers: [AuthController],
   providers: [AuthService, OtpService, TokenService, JwtStrategy],
+  exports: [AuthService], // consumed by the USSD channel (edge module)
 })
 export class AuthModule {}

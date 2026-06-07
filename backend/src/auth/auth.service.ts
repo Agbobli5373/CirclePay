@@ -9,6 +9,7 @@ import {
 import { ConfigService } from '@nestjs/config'
 import * as argon2 from 'argon2'
 import type { Response } from 'express'
+import type { User } from '@prisma/client'
 import { PrismaService } from '../prisma/prisma.service'
 import { RedisService } from '../redis/redis.service'
 import { NotificationsService } from '../notifications/notifications.service'
@@ -124,9 +125,14 @@ export class AuthService {
     return { ok: true }
   }
 
-  /** Login with phone + PIN, with failed-attempt lockout. */
-  async login(dto: LoginDto, res: Response): Promise<{ ok: true }> {
-    const user = await this.db.user.findUnique({ where: { phone: dto.phone } })
+  /**
+   * Verify phone + PIN with failed-attempt lockout, WITHOUT issuing a session.
+   * Returns the user on success. Shared by `login` (web) and the USSD channel so
+   * PIN attempts from either front door hit the SAME `pin:fail` / `pin:lock` Redis
+   * keys — one consistent, un-farmable lockout across channels.
+   */
+  async verifyPhonePin(phone: string, pin: string): Promise<User> {
+    const user = await this.db.user.findUnique({ where: { phone } })
     // Constant-ish behaviour whether or not the user exists.
     if (!user || !user.pinHash) {
       throw new UnauthorizedException({ code: 'AUTH_INVALID', message: 'Invalid phone or PIN' })
@@ -137,7 +143,7 @@ export class AuthService {
       throw new HttpException({ code: 'LOCKED', message: 'Too many attempts, try later' }, HttpStatus.LOCKED)
     }
 
-    const valid = await argon2.verify(user.pinHash, dto.pin)
+    const valid = await argon2.verify(user.pinHash, pin)
     if (!valid) {
       const max = Number(this.config.get<string>('PIN_MAX_ATTEMPTS') ?? 5)
       const lockSecs = Number(this.config.get<string>('PIN_LOCK_SECONDS') ?? 900)
@@ -151,6 +157,12 @@ export class AuthService {
     }
 
     await this.redis.del(`pin:fail:${user.id}`)
+    return user
+  }
+
+  /** Login with phone + PIN (verify + lockout), then issue a session. */
+  async login(dto: LoginDto, res: Response): Promise<{ ok: true }> {
+    const user = await this.verifyPhonePin(dto.phone, dto.pin)
     await this.tokens.issueSession(res, { id: user.id, isOpsAdmin: user.isOpsAdmin })
     return { ok: true }
   }

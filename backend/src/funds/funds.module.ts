@@ -9,5 +9,6 @@ import { FundsService } from './funds.service'
 @Module({
   controllers: [FundsController],
   providers: [FundsService],
+  exports: [FundsService], // consumed by the USSD channel (edge module)
 })
 export class FundsModule {}
