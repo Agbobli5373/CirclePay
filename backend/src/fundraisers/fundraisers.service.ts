@@ -438,6 +438,7 @@ export class FundraisersService implements OnModuleInit {
         progressPercent: progress(f.fundraiser!.raised, f.fundraiser!.goal),
         verificationStatus: f.fundraiser!.verificationStatus,
         status: f.status,
+        createdAt: f.createdAt,
       }))
   }
 

@@ -443,7 +443,7 @@ export class FundsService {
       include: this.fundInclude,
       orderBy: { createdAt: 'desc' },
     })
-    return funds.filter((f) => f.susu).map((f) => this.toSummary(f, userId))
+    return funds.filter((f) => f.susu).map((f) => ({ ...this.toSummary(f, userId), createdAt: f.createdAt }))
   }
 
   async detail(userId: string, fundId: string): Promise<FundDetailDto> {

@@ -93,6 +93,7 @@ export interface FundSummary {
   progressPercent: number
   potPesewas: number
   myNextPayoutCycle: number | null
+  createdAt: string
 }
 
 export interface MemberView {
@@ -213,6 +214,7 @@ export interface MyFundraiser {
   progressPercent: number
   verificationStatus: 'unverified' | 'pending' | 'verified' | 'rejected'
   status: string
+  createdAt: string
 }
 export interface FundraiserInvite {
   id: string

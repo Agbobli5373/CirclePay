@@ -4,10 +4,10 @@ import Link from 'next/link'
 import { AppShell } from '@/components/app-shell'
 import { Search, Plus, Users, RefreshCcw, Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useFunds, useMyFundraisers } from '@/lib/queries'
 import { formatGhs } from '@circlepay/shared'
-import type { FundSummary } from '@/lib/api'
+import type { FundSummary, MyFundraiser } from '@/lib/api'
 import { MedicalFundCard } from '@/components/medical-fund-card'
 
 function FundCard({ fund }: { fund: FundSummary }) {
@@ -54,19 +54,53 @@ function FundCard({ fund }: { fund: FundSummary }) {
   )
 }
 
+type TypeFilter = 'all' | 'Susu' | 'Medical'
+type StatusFilter = 'all' | 'active' | 'completed'
+type SortKey = 'recent' | 'name' | 'progress'
+
+/** Normalised row so Susu funds + medical fundraisers can share one filterable/sortable grid. */
+type Row =
+  | { kind: 'Susu'; id: string; name: string; status: string; progress: number; createdAt: string; fund: FundSummary }
+  | { kind: 'Medical'; id: string; name: string; beneficiary: string; status: string; progress: number; createdAt: string; m: MyFundraiser }
+
 export default function FundsPage() {
   const [search, setSearch] = useState('')
+  const [type, setType] = useState<TypeFilter>('all')
+  const [status, setStatus] = useState<StatusFilter>('all')
+  const [sort, setSort] = useState<SortKey>('recent')
   const { data: funds, isLoading, isError, refetch } = useFunds('mine')
   const { data: medical } = useMyFundraisers()
 
-  const q = search.toLowerCase()
-  const filtered = (funds ?? []).filter((f) => f.name.toLowerCase().includes(q))
-  const filteredMedical = (medical ?? []).filter((m) => m.name.toLowerCase().includes(q) || m.beneficiary.toLowerCase().includes(q))
+  const all: Row[] = useMemo(
+    () => [
+      ...(funds ?? []).map((f): Row => ({ kind: 'Susu', id: f.id, name: f.name, status: f.status, progress: f.progressPercent, createdAt: f.createdAt, fund: f })),
+      ...(medical ?? []).map((m): Row => ({ kind: 'Medical', id: m.id, name: m.name, beneficiary: m.beneficiary, status: m.status, progress: m.progressPercent, createdAt: m.createdAt, m })),
+    ],
+    [funds, medical],
+  )
+
+  const rows = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const filtered = all.filter((r) => {
+      if (type !== 'all' && r.kind !== type) return false
+      if (status !== 'all' && r.status !== status) return false
+      if (q && !r.name.toLowerCase().includes(q) && !(r.kind === 'Medical' && r.beneficiary.toLowerCase().includes(q))) return false
+      return true
+    })
+    return filtered.sort((a, b) => {
+      if (sort === 'name') return a.name.localeCompare(b.name)
+      if (sort === 'progress') return b.progress - a.progress
+      return b.createdAt.localeCompare(a.createdAt) // recent — ISO strings sort chronologically
+    })
+  }, [all, search, type, status, sort])
+
+  const types: TypeFilter[] = ['all', 'Susu', 'Medical']
+  const selectCls = 'h-10 rounded-lg border border-border bg-card px-3 text-sm font-medium text-foreground focus:outline-none focus:border-primary cursor-pointer'
 
   return (
     <AppShell currentPage="funds">
-      <div className="space-y-6 pb-6">
-        {/* Title bar: title | search (constrained) | action — one row on desktop, stacked on mobile */}
+      <div className="space-y-5 pb-6">
+        {/* Title bar: title | search | action */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex-1 min-w-0">
             <h1 className="text-2xl font-bold text-foreground">Funds</h1>
@@ -90,6 +124,35 @@ export default function FundsPage() {
           </Link>
         </div>
 
+        {/* Filter / sort bar: type pills (left) · status + sort (right) */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex gap-1.5 overflow-x-auto">
+            {types.map((t) => (
+              <button
+                key={t}
+                onClick={() => setType(t)}
+                className={`px-4 h-10 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
+                  type === t ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-foreground hover:border-primary/40'
+                }`}
+              >
+                {t === 'all' ? 'All' : t}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <select aria-label="Filter by status" value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)} className={selectCls}>
+              <option value="all">All statuses</option>
+              <option value="active">Active</option>
+              <option value="completed">Completed</option>
+            </select>
+            <select aria-label="Sort by" value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className={selectCls}>
+              <option value="recent">Newest</option>
+              <option value="name">Name (A–Z)</option>
+              <option value="progress">Most progress</option>
+            </select>
+          </div>
+        </div>
+
         {isLoading && (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -105,43 +168,25 @@ export default function FundsPage() {
           </div>
         )}
 
-        {!isLoading && !isError && (
-          <>
-            {filtered.length > 0 && (
-              <section className="space-y-3">
-                {filteredMedical.length > 0 && (
-                  <h2 className="text-xs font-semibold text-secondary uppercase tracking-wide">Susu circles</h2>
-                )}
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {filtered.map((fund) => (
-                    <FundCard key={fund.id} fund={fund} />
-                  ))}
-                </div>
-              </section>
-            )}
+        {!isLoading && !isError && rows.length > 0 && (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {rows.map((r) => (r.kind === 'Susu' ? <FundCard key={r.id} fund={r.fund} /> : <MedicalFundCard key={r.id} f={r.m} />))}
+          </div>
+        )}
 
-            {filteredMedical.length > 0 && (
-              <section className="space-y-3">
-                <h2 className="text-xs font-semibold text-secondary uppercase tracking-wide">Medical fundraisers</h2>
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {filteredMedical.map((m) => (
-                    <MedicalFundCard key={m.id} f={m} />
-                  ))}
-                </div>
-              </section>
+        {!isLoading && !isError && rows.length === 0 && (
+          <div className="text-center py-12">
+            {all.length === 0 ? (
+              <>
+                <p className="text-secondary">You haven&apos;t created any funds yet.</p>
+                <Link href="/create" className="cp-btn-primary mt-4 inline-flex">
+                  <Plus className="h-4 w-4" /> Create your first fund
+                </Link>
+              </>
+            ) : (
+              <p className="text-secondary">No funds match these filters.</p>
             )}
-
-            {filtered.length === 0 && filteredMedical.length === 0 && (
-              <div className="text-center py-12">
-                <p className="text-secondary">{search ? 'No funds match your search.' : 'You haven’t created any funds yet.'}</p>
-                {!search && (
-                  <Link href="/create" className="cp-btn-primary mt-4 inline-flex">
-                    <Plus className="h-4 w-4" /> Create your first fund
-                  </Link>
-                )}
-              </div>
-            )}
-          </>
+          </div>
         )}
       </div>
     </AppShell>
