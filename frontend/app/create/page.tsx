@@ -30,6 +30,8 @@ export default function CreateFundPage() {
   const [members, setMembers] = useState('')
   const [startMonth, setStartMonth] = useState(nextMonthValue())
   const [payout, setPayout] = useState<Payout>('Rotating order')
+  const [requiresDeposit, setRequiresDeposit] = useState(false)
+  const [depositAmount, setDepositAmount] = useState('')
 
   // Medical
   const [goal, setGoal] = useState('')
@@ -100,8 +102,8 @@ export default function CreateFundPage() {
         memberCount: membersNum,
         startDate,
         payoutRule: payout === 'Random draw' ? 'random' : 'rotating',
-        requiresDeposit: false,
-        depositAmount: 0,
+        requiresDeposit,
+        depositAmount: requiresDeposit ? toPesewas(depositNum) : 0,
       })
       setCreatedFundId(res.id)
       setSubmitted(true)
@@ -128,10 +130,11 @@ export default function CreateFundPage() {
   const everyLabel = frequency === 'Weekly' ? 'week' : 'month'
   const periodLabel = frequency === 'Weekly' ? 'weeks' : 'months'
   const cyclePot = amountNum > 0 && membersNum > 0 ? amountNum * membersNum : 0
+  const depositNum = Number(depositAmount)
 
   const payeeOk = payoutRoute === 'hospital_bank' ? payeeBank.trim().length > 0 : payeeMomo.replace(/\D/g, '').length >= 9
   const canSubmit = isSusu
-    ? Boolean(name && amountNum > 0 && membersNum > 0)
+    ? Boolean(name && amountNum > 0 && membersNum > 0 && (!requiresDeposit || depositNum > 0))
     : Boolean(name && goalNum > 0 && beneficiary && story && payeeName && payeeOk)
 
   const inviteLink = `circlepay.app/join/${(name || 'fund').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}`
@@ -485,6 +488,27 @@ export default function CreateFundPage() {
                 </div>
               </Field>
 
+              <Field label="Security deposit">
+                <div className="grid grid-cols-2 gap-2">
+                  <Pill active={!requiresDeposit} onClick={() => setRequiresDeposit(false)}>Not required</Pill>
+                  <Pill active={requiresDeposit} onClick={() => setRequiresDeposit(true)}>Require a deposit</Pill>
+                </div>
+                {requiresDeposit && (
+                  <div className="mt-2 space-y-1.5">
+                    <input
+                      inputMode="numeric"
+                      value={depositAmount}
+                      onChange={(e) => setDepositAmount(e.target.value.replace(/\D/g, ''))}
+                      placeholder="Deposit per member (GHS), e.g. 200"
+                      className="cp-input"
+                    />
+                    <p className="text-xs text-secondary leading-relaxed">
+                      A buffer each member pays on joining. If someone misses a turn, their deposit covers that cycle so the payee is still paid in full.
+                    </p>
+                  </div>
+                )}
+              </Field>
+
               {/* Live summary */}
               {cyclePot > 0 && (
                 <div className="rounded-xl bg-primary/5 p-4 text-sm text-foreground leading-relaxed lg:hidden">
@@ -668,6 +692,9 @@ export default function CreateFundPage() {
                 <PreviewStat label="Members" value={membersNum > 0 ? String(membersNum) : '—'} />
                 <PreviewStat label="Pot each cycle" value={cyclePot > 0 ? `GHS ${cyclePot.toLocaleString()}` : '—'} accent />
                 <PreviewStat label="Payout" value={payout} />
+                {requiresDeposit && (
+                  <PreviewStat label="Deposit" value={depositNum > 0 ? `GHS ${depositNum.toLocaleString()}` : '—'} />
+                )}
               </div>
               <p className="text-xs text-secondary leading-relaxed border-t border-border/60 pt-3">
                 Invite members after you create — the circle starts automatically once it fills.
