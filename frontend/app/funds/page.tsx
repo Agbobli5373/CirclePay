@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { AppShell } from '@/components/app-shell'
 import { Search, Plus, Users, RefreshCcw, Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useFunds, useMyFundraisers } from '@/lib/queries'
 import { formatGhs } from '@circlepay/shared'
 import type { FundSummary, MyFundraiser } from '@/lib/api'
@@ -59,6 +59,9 @@ type TypeFilter = 'all' | 'Susu' | 'Medical'
 type StatusFilter = 'all' | 'active' | 'completed'
 type SortKey = 'recent' | 'name' | 'progress'
 
+/** Cards revealed before "Load more" — a multiple of 6 so the last row is full at 2- and 3-col widths. */
+const PAGE_SIZE = 6
+
 /** Normalised row so Susu funds + medical fundraisers can share one filterable/sortable grid. */
 type Row =
   | { kind: 'Susu'; id: string; name: string; status: string; progress: number; createdAt: string; fund: FundSummary }
@@ -69,6 +72,7 @@ export default function FundsPage() {
   const [type, setType] = useState<TypeFilter>('all')
   const [status, setStatus] = useState<StatusFilter>('all')
   const [sort, setSort] = useState<SortKey>('recent')
+  const [visible, setVisible] = useState(PAGE_SIZE)
   const { data: funds, isLoading, isError, refetch } = useFunds('mine')
   const { data: medical } = useMyFundraisers()
 
@@ -94,6 +98,11 @@ export default function FundsPage() {
       return b.createdAt.localeCompare(a.createdAt) // recent — ISO strings sort chronologically
     })
   }, [all, search, type, status, sort])
+
+  // Reset the reveal count whenever the filters/search/sort change, so you start from the top.
+  useEffect(() => {
+    setVisible(PAGE_SIZE)
+  }, [type, status, sort, search])
 
   const types: TypeFilter[] = ['all', 'Susu', 'Medical']
 
@@ -179,9 +188,21 @@ export default function FundsPage() {
         )}
 
         {!isLoading && !isError && rows.length > 0 && (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {rows.map((r) => (r.kind === 'Susu' ? <FundCard key={r.id} fund={r.fund} /> : <MedicalFundCard key={r.id} f={r.m} />))}
-          </div>
+          <>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {rows.slice(0, visible).map((r) => (r.kind === 'Susu' ? <FundCard key={r.id} fund={r.fund} /> : <MedicalFundCard key={r.id} f={r.m} />))}
+            </div>
+            <div className="flex flex-col items-center gap-3 pt-1 text-center">
+              <p className="text-xs text-secondary">
+                {visible < rows.length ? `Showing ${visible} of ${rows.length}` : `${rows.length} ${rows.length === 1 ? 'fund' : 'funds'}`}
+              </p>
+              {visible < rows.length && (
+                <button onClick={() => setVisible((v) => v + PAGE_SIZE)} className="cp-btn-ghost">
+                  Load more
+                </button>
+              )}
+            </div>
+          </>
         )}
 
         {!isLoading && !isError && rows.length === 0 && (
