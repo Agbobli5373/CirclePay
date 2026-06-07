@@ -134,7 +134,7 @@ export default function CreateFundPage() {
 
   const payeeOk = payoutRoute === 'hospital_bank' ? payeeBank.trim().length > 0 : payeeMomo.replace(/\D/g, '').length >= 9
   const canSubmit = isSusu
-    ? Boolean(name && amountNum > 0 && membersNum > 0 && (!requiresDeposit || depositNum > 0))
+    ? Boolean(name && amountNum > 0 && membersNum >= 2 && membersNum <= 50 && (!requiresDeposit || depositNum > 0))
     : Boolean(name && goalNum > 0 && beneficiary && story && payeeName && payeeOk)
 
   const inviteLink = `circlepay.app/join/${(name || 'fund').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}`
@@ -429,6 +429,7 @@ export default function CreateFundPage() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={isSusu ? 'e.g. Kumasi Traders' : "e.g. Kofi's surgery"}
+              maxLength={80}
               className="cp-input"
             />
           </Field>
@@ -454,6 +455,9 @@ export default function CreateFundPage() {
                     placeholder="10"
                     className="cp-input"
                   />
+                  <p className={`text-xs mt-1.5 ${members && (membersNum < 2 || membersNum > 50) ? 'text-destructive' : 'text-secondary'}`}>
+                    {membersNum > 50 ? 'Maximum 50 members.' : members && membersNum < 2 ? 'A Susu needs at least 2 members.' : 'Between 2 and 50 — one payout per member.'}
+                  </p>
                 </Field>
               </div>
 
