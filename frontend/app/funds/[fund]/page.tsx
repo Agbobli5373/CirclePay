@@ -189,10 +189,7 @@ export default function SusuFundPage() {
                         <div key={uid} className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-2.5">
                           <span className="h-7 w-7 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-foreground">{i + 1}</span>
                           <span className="flex-1 min-w-0 text-sm font-medium text-foreground truncate">{nameFor(uid)}</span>
-                          <div className="flex items-center gap-1">
-                            <button type="button" aria-label="Move up" onClick={() => moveOrder(i, i - 1)} disabled={i === 0 || reorderBusy} className="h-7 w-7 rounded-md border border-border flex items-center justify-center disabled:opacity-30 hover:border-primary/40 transition-colors"><ArrowUp className="h-3.5 w-3.5" /></button>
-                            <button type="button" aria-label="Move down" onClick={() => moveOrder(i, i + 1)} disabled={i === orderIds.length - 1 || reorderBusy} className="h-7 w-7 rounded-md border border-border flex items-center justify-center disabled:opacity-30 hover:border-primary/40 transition-colors"><ArrowDown className="h-3.5 w-3.5" /></button>
-                          </div>
+                          <ReorderArrows index={i} lockedCount={0} count={orderIds.length} busy={reorderBusy} onMove={moveOrder} />
                         </div>
                       ))}
                     </div>
@@ -362,10 +359,7 @@ export default function SusuFundPage() {
                         {status === 'current' && <span className="text-xs font-medium text-primary bg-primary/10 px-2 py-1 rounded">Current</span>}
                         {status === 'upcoming' && isMe && <span className="text-xs font-medium text-primary">Your turn</span>}
                         {canArrange && status === 'upcoming' && (
-                          <div className="flex items-center gap-1">
-                            <button type="button" aria-label="Move up" onClick={() => moveOrder(i, i - 1)} disabled={i <= lockedCount || reorderBusy} className="h-7 w-7 rounded-md border border-border flex items-center justify-center disabled:opacity-30 hover:border-primary/40 transition-colors"><ArrowUp className="h-3.5 w-3.5" /></button>
-                            <button type="button" aria-label="Move down" onClick={() => moveOrder(i, i + 1)} disabled={i >= orderIds.length - 1 || reorderBusy} className="h-7 w-7 rounded-md border border-border flex items-center justify-center disabled:opacity-30 hover:border-primary/40 transition-colors"><ArrowDown className="h-3.5 w-3.5" /></button>
-                          </div>
+                          <ReorderArrows index={i} lockedCount={lockedCount} count={orderIds.length} busy={reorderBusy} onMove={moveOrder} />
                         )}
                         {canArrange && status !== 'upcoming' && <Lock className="h-3.5 w-3.5 text-secondary" aria-label="Locked — already paid" />}
                       </div>
@@ -378,6 +372,18 @@ export default function SusuFundPage() {
         )}
       </div>
     </AppShell>
+  )
+}
+
+/** Up/down reorder controls. Movable only above `lockedCount` (the frozen paid/current prefix);
+ *  pass lockedCount={0} pre-start when everything is movable. */
+function ReorderArrows({ index, lockedCount, count, busy, onMove }: { index: number; lockedCount: number; count: number; busy: boolean; onMove: (from: number, to: number) => void }) {
+  const cls = 'h-7 w-7 rounded-md border border-border flex items-center justify-center disabled:opacity-30 hover:border-primary/40 transition-colors'
+  return (
+    <div className="flex items-center gap-1">
+      <button type="button" aria-label="Move up" onClick={() => onMove(index, index - 1)} disabled={index <= lockedCount || busy} className={cls}><ArrowUp className="h-3.5 w-3.5" /></button>
+      <button type="button" aria-label="Move down" onClick={() => onMove(index, index + 1)} disabled={index >= count - 1 || busy} className={cls}><ArrowDown className="h-3.5 w-3.5" /></button>
+    </div>
   )
 }
 
