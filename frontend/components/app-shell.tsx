@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Home, Wallet, Users, ActivitySquare, User, ChevronLeft, ChevronRight, LogOut, Loader2 } from 'lucide-react'
+import { Home, Wallet, ActivitySquare, User, ChevronLeft, ChevronRight, LogOut, Loader2 } from 'lucide-react'
 import { Logo, LogoMark } from './logo'
 import { NotificationsBell } from './notifications-bell'
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip'
@@ -26,14 +26,13 @@ function initialsOf(name: string | null, phone: string): string {
 
 interface AppShellProps {
   children: React.ReactNode
-  currentPage?: 'home' | 'funds' | 'pools' | 'activity' | 'profile'
+  currentPage?: 'home' | 'funds' | 'activity' | 'profile'
   title?: string
 }
 
 const navItems = [
   { id: 'home', label: 'Home', icon: Home, href: '/' },
   { id: 'funds', label: 'Funds', icon: Wallet, href: '/funds' },
-  { id: 'pools', label: 'Pools', icon: Users, href: '/pools' },
   { id: 'activity', label: 'Activity', icon: ActivitySquare, href: '/activity' },
   { id: 'profile', label: 'Profile', icon: User, href: '/profile' },
 ]
