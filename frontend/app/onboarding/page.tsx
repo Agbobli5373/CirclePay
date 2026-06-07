@@ -43,6 +43,9 @@ export default function OnboardingPage() {
   const [loginPin, setLoginPin] = useState('')
   const [loginError, setLoginError] = useState('')
 
+  // Forgot-PIN reset — a sub-flow of login: phone (known) → OTP (purpose 'reset') → new PIN.
+  const [resetting, setResetting] = useState(false)
+
   const fullPhone = `+233${phone.replace(/\D/g, '').slice(0, 9)}`
   const phoneValid = phone.replace(/\D/g, '').length >= 9
 
@@ -76,11 +79,11 @@ export default function OnboardingPage() {
 
   // ---------- actions ----------
 
-  async function sendCode() {
+  async function sendCode(forReset = false) {
     if (busy || !phoneValid) return
     setBusy(true)
     try {
-      const res = await api.auth.requestOtp(fullPhone, network as ApiNetwork)
+      const res = await api.auth.requestOtp(fullPhone, network as ApiNetwork, forReset ? 'reset' : undefined)
       setOtp('')
       setSecondsLeft(272)
       setStep('otp')
@@ -97,8 +100,12 @@ export default function OnboardingPage() {
     if (busy || otp.length < 6) return
     setBusy(true)
     try {
-      const { registered } = await api.auth.verifyOtp(fullPhone, otp)
-      if (registered) {
+      const { registered } = await api.auth.verifyOtp(fullPhone, otp, resetting ? 'reset' : undefined)
+      if (resetting) {
+        // Phone ownership proven → let them choose a new PIN (no current PIN needed).
+        setPin(''); setConfirmPin(''); setPinStage('create'); setPinError(false)
+        setStep('setpin')
+      } else if (registered) {
         finishToDashboard(true)
       } else {
         // New number (incl. someone who tried "use a code" without an account) → create a PIN.
@@ -135,13 +142,19 @@ export default function OnboardingPage() {
   async function submitPin(finalPin: string) {
     setBusy(true)
     try {
+      if (resetting) {
+        await api.auth.resetPin(finalPin, finalPin)
+        toast.success('PIN reset — you’re signed in')
+        finishToDashboard(false)
+        return
+      }
       await api.auth.setPin({ pin: finalPin, confirmPin: finalPin, network: network as ApiNetwork, name: name.trim() || undefined })
       rememberPhone()
       rememberName(name.trim() || undefined)
       toast.success('Account created')
       router.replace('/')
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : 'Could not set PIN')
+      toast.error(e instanceof ApiError ? e.message : resetting ? 'Could not reset PIN' : 'Could not set PIN')
       setPin('')
       setConfirmPin('')
       setPinStage('create')
@@ -205,7 +218,7 @@ export default function OnboardingPage() {
 
   function switchMode(next: Mode) {
     setMode(next)
-    setLoginError(''); setOtp(''); setPin(''); setConfirmPin(''); setLoginPin(''); setPinStage('create'); setPinError(false)
+    setLoginError(''); setOtp(''); setPin(''); setConfirmPin(''); setLoginPin(''); setPinStage('create'); setPinError(false); setResetting(false)
     setStep('phone')
   }
 
@@ -321,12 +334,12 @@ export default function OnboardingPage() {
                 </button>
 
                 <div className="flex items-center justify-between text-sm">
-                  <button type="button" onClick={() => sendCode()} disabled={busy} className="text-primary font-medium hover:underline disabled:opacity-50">
-                    Forgot PIN? Use a code
+                  <button type="button" onClick={() => { setResetting(true); sendCode(true) }} disabled={busy} className="text-primary font-medium hover:underline disabled:opacity-50">
+                    Forgot PIN? Reset it
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setLoginError(''); setLoginPin(''); setKnownName(null); setStep('phone') }}
+                    onClick={() => { setLoginError(''); setLoginPin(''); setResetting(false); setKnownName(null); setStep('phone') }}
                     className="text-secondary hover:text-foreground"
                   >
                     Use another number
@@ -349,7 +362,7 @@ export default function OnboardingPage() {
                   {secondsLeft > 0 ? (
                     <span className="text-secondary">Resend in {timer}</span>
                   ) : (
-                    <button type="button" onClick={() => sendCode()} disabled={busy} className="text-primary font-medium hover:underline disabled:opacity-50">
+                    <button type="button" onClick={() => sendCode(resetting)} disabled={busy} className="text-primary font-medium hover:underline disabled:opacity-50">
                       Resend code
                     </button>
                   )}
@@ -375,14 +388,18 @@ export default function OnboardingPage() {
                     <ShieldCheck className="h-7 w-7 text-primary" />
                   </div>
                   <h1 className="text-2xl font-semibold text-foreground">
-                    {pinStage === 'create' ? 'Create your PIN' : 'Confirm your PIN'}
+                    {pinStage === 'create'
+                      ? resetting ? 'Choose a new PIN' : 'Create your PIN'
+                      : resetting ? 'Confirm your new PIN' : 'Confirm your PIN'}
                   </h1>
                   <p className="text-sm text-secondary">
-                    {pinStage === 'create' ? 'Choose a 4-digit PIN to secure your account.' : 'Enter your PIN again to confirm.'}
+                    {pinStage === 'create'
+                      ? resetting ? 'Pick a new 4-digit PIN you’ll remember.' : 'Choose a 4-digit PIN to secure your account.'
+                      : 'Enter your PIN again to confirm.'}
                   </p>
                 </div>
 
-                {pinStage === 'create' && (
+                {pinStage === 'create' && !resetting && (
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium text-foreground">
                       What should we call you? <span className="text-secondary font-normal">(optional)</span>

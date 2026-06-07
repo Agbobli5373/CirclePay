@@ -28,7 +28,7 @@ describe('OtpService', () => {
     const svc = new OtpService(redis as never, config)
     const code = await svc.generate('+233241234567')
     expect(code).toMatch(/^\d{6}$/)
-    const stored = JSON.parse(redis.store.get('otp:+233241234567')!)
+    const stored = JSON.parse(redis.store.get('otp:+233241234567:auth')!)
     expect(stored.codeHash).not.toContain(code)
     expect(stored.attempts).toBe(0)
   })
@@ -39,7 +39,7 @@ describe('OtpService', () => {
     const code = await svc.generate('+233241234567')
     const res = await svc.verify('+233241234567', code)
     expect(res).toEqual({ ok: true })
-    expect(redis.store.has('otp:+233241234567')).toBe(false)
+    expect(redis.store.has('otp:+233241234567:auth')).toBe(false)
   })
 
   it('rejects a wrong code and increments attempts', async () => {
@@ -48,7 +48,7 @@ describe('OtpService', () => {
     await svc.generate('+233241234567')
     const res = await svc.verify('+233241234567', '000000')
     expect(res).toEqual({ ok: false, reason: 'INVALID' })
-    expect(JSON.parse(redis.store.get('otp:+233241234567')!).attempts).toBe(1)
+    expect(JSON.parse(redis.store.get('otp:+233241234567:auth')!).attempts).toBe(1)
   })
 
   it('reports EXPIRED when no code exists', async () => {
@@ -66,5 +66,15 @@ describe('OtpService', () => {
     expect(await svc.withinRateLimit(phone)).toBe(true) // 2
     expect(await svc.withinRateLimit(phone)).toBe(true) // 3
     expect(await svc.withinRateLimit(phone)).toBe(false) // 4 → blocked
+  })
+
+  it('keys codes by purpose — an auth code cannot be verified as a reset', async () => {
+    const redis = makeRedis()
+    const svc = new OtpService(redis as never, config)
+    const code = await svc.generate('+233241234567', 'auth')
+    // Correct code, wrong purpose → looked up under a different key → EXPIRED.
+    expect(await svc.verify('+233241234567', code, 'reset')).toEqual({ ok: false, reason: 'EXPIRED' })
+    // The same code under the matching purpose still works.
+    expect(await svc.verify('+233241234567', code, 'auth')).toEqual({ ok: true })
   })
 })

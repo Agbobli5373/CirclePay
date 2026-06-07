@@ -13,6 +13,12 @@ export const phoneSchema = z
 export const networkSchema = z.enum(['MTN', 'Telecel', 'AirtelTigo'])
 export const languageSchema = z.enum(['en', 'tw', 'ga'])
 
+/**
+ * Why an OTP is being requested. Keyed separately in Redis so a login OTP can't
+ * be replayed to reset a PIN. Defaults to 'auth' server-side when omitted.
+ */
+export const otpPurposeSchema = z.enum(['auth', 'reset'])
+
 /** Trivial PINs that must be rejected. */
 const TRIVIAL_PINS = new Set([
   '0000', '1111', '2222', '3333', '4444', '5555', '6666', '7777', '8888', '9999',
@@ -28,11 +34,13 @@ export const pinSchema = z
 export const requestOtpSchema = z.object({
   phone: phoneSchema,
   network: networkSchema,
+  purpose: otpPurposeSchema.optional(),
 })
 
 export const verifyOtpSchema = z.object({
   phone: phoneSchema,
   code: z.string().regex(/^\d{6}$/, 'Enter the 6-digit code'),
+  purpose: otpPurposeSchema.optional(),
 })
 
 export const setPinSchema = z
@@ -71,9 +79,23 @@ export const changePinSchema = z
     path: ['newPin'],
   })
 
+/**
+ * Reset PIN after proving phone ownership via a fresh `purpose:'reset'` OTP.
+ * Deliberately has no `currentPin` — the OTP is the proof of identity, and a
+ * short-lived reset token (not a session) gates the call.
+ */
+export const resetPinSchema = z
+  .object({
+    newPin: pinSchema,
+    confirmPin: z.string(),
+  })
+  .refine((d) => d.newPin === d.confirmPin, { message: 'PINs do not match', path: ['confirmPin'] })
+
+export type OtpPurpose = z.infer<typeof otpPurposeSchema>
 export type RequestOtpInput = z.infer<typeof requestOtpSchema>
 export type VerifyOtpInput = z.infer<typeof verifyOtpSchema>
 export type SetPinInput = z.infer<typeof setPinSchema>
 export type LoginInput = z.infer<typeof loginSchema>
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>
 export type ChangePinInput = z.infer<typeof changePinSchema>
+export type ResetPinInput = z.infer<typeof resetPinSchema>

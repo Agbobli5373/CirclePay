@@ -34,6 +34,7 @@ const NO_REFRESH = new Set([
   '/auth/request-otp',
   '/auth/verify-otp',
   '/auth/set-pin',
+  '/auth/reset-pin',
   '/auth/login',
   '/auth/logout',
   '/auth/refresh',
@@ -269,10 +270,10 @@ export interface CreateSusuPayload {
 
 export const api = {
   auth: {
-    requestOtp: (phone: string, network: Network) =>
-      request<{ ok: true; devCode?: string }>('/auth/request-otp', { method: 'POST', body: { phone, network } }),
-    verifyOtp: (phone: string, code: string) =>
-      request<{ registered: boolean }>('/auth/verify-otp', { method: 'POST', body: { phone, code } }),
+    requestOtp: (phone: string, network: Network, purpose?: 'auth' | 'reset') =>
+      request<{ ok: true; devCode?: string }>('/auth/request-otp', { method: 'POST', body: { phone, network, purpose } }),
+    verifyOtp: (phone: string, code: string, purpose?: 'auth' | 'reset') =>
+      request<{ registered: boolean; reset?: boolean }>('/auth/verify-otp', { method: 'POST', body: { phone, code, purpose } }),
     setPin: (body: { pin: string; confirmPin: string; network: Network; name?: string }) =>
       request<{ ok: true }>('/auth/set-pin', { method: 'POST', body }),
     login: (phone: string, pin: string) =>
@@ -282,6 +283,8 @@ export const api = {
     updateMe: (name: string) => request<Me>('/auth/me', { method: 'PATCH', body: { name } }),
     changePin: (currentPin: string, newPin: string, confirmPin: string) =>
       request<{ ok: true }>('/auth/pin', { method: 'PATCH', body: { currentPin, newPin, confirmPin } }),
+    resetPin: (newPin: string, confirmPin: string) =>
+      request<{ ok: true }>('/auth/reset-pin', { method: 'POST', body: { newPin, confirmPin } }),
   },
   funds: {
     create: (body: CreateSusuPayload) => request<FundSummary>('/funds', { method: 'POST', body }),

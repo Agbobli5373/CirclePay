@@ -157,4 +157,61 @@ describe('AuthService', () => {
     ).rejects.toMatchObject({ status: 423 })
     expect(redis.setEx).toHaveBeenCalledWith('pin:lock:u1', '1', expect.any(Number))
   })
+
+  it('verifyOtp (purpose reset) issues a reset-token — not a session — for an existing user', async () => {
+    const otp = { verify: jest.fn().mockResolvedValue({ ok: true }) }
+    const db = { user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', isOpsAdmin: false }) } }
+    const tokens = { signResetToken: jest.fn().mockReturnValue('reset.jwt'), setResetCookie: jest.fn(), issueSession: jest.fn() }
+    const svc = new AuthService(db as never, {} as never, otp as never, tokens as never, {} as never, config)
+    const out = await svc.verifyOtp({ phone: '+233241234567', code: '123456', purpose: 'reset' } as never, res())
+    expect(out).toEqual({ registered: true, reset: true })
+    expect(otp.verify).toHaveBeenCalledWith('+233241234567', '123456', 'reset')
+    expect(tokens.setResetCookie).toHaveBeenCalled()
+    expect(tokens.issueSession).not.toHaveBeenCalled() // no login until the new PIN is set
+  })
+
+  it('verifyOtp (purpose reset) rejects a number with no account (NO_ACCOUNT)', async () => {
+    const otp = { verify: jest.fn().mockResolvedValue({ ok: true }) }
+    const db = { user: { findUnique: jest.fn().mockResolvedValue(null) } }
+    const tokens = { signResetToken: jest.fn(), setResetCookie: jest.fn() }
+    const svc = new AuthService(db as never, {} as never, otp as never, tokens as never, {} as never, config)
+    await expect(
+      svc.verifyOtp({ phone: '+233241234567', code: '123456', purpose: 'reset' } as never, res()),
+    ).rejects.toMatchObject({ response: { code: 'NO_ACCOUNT' } })
+    expect(tokens.setResetCookie).not.toHaveBeenCalled()
+  })
+
+  it('resetPin sets a new hash, clears BOTH lockout keys, and issues a session', async () => {
+    const argon = require('argon2')
+    const pinHash = await argon.hash('5071', { type: argon.argon2id })
+    const db = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'u1', isOpsAdmin: false, pinHash }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+    }
+    const redis = { del: jest.fn() }
+    const tokens = {
+      verifyResetToken: jest.fn().mockReturnValue({ phone: '+233241234567' }),
+      clearResetCookie: jest.fn(),
+      issueSession: jest.fn(),
+    }
+    const svc = new AuthService(db as never, redis as never, {} as never, tokens as never, {} as never, config)
+    const out = await svc.resetPin('reset.jwt', { newPin: '8240', confirmPin: '8240' } as never, res())
+    expect(out).toEqual({ ok: true })
+    const updArg = db.user.update.mock.calls[0][0]
+    expect(updArg.data.pinHash).toBeDefined()
+    expect(updArg.data.pinHash).not.toBe(pinHash) // re-hashed to the new PIN
+    expect(redis.del).toHaveBeenCalledWith('pin:fail:u1', 'pin:lock:u1') // recovery clears the lock
+    expect(tokens.issueSession).toHaveBeenCalled()
+  })
+
+  it('resetPin without a reset token throws RESET_TOKEN_INVALID and updates nothing', async () => {
+    const db = { user: { findUnique: jest.fn(), update: jest.fn() } }
+    const svc = new AuthService(db as never, {} as never, {} as never, {} as never, {} as never, config)
+    await expect(
+      svc.resetPin(undefined, { newPin: '8240', confirmPin: '8240' } as never, res()),
+    ).rejects.toMatchObject({ response: { code: 'RESET_TOKEN_INVALID' } })
+    expect(db.user.update).not.toHaveBeenCalled()
+  })
 })
