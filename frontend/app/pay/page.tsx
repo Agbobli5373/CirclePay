@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Logo } from '@/components/logo'
 import { OtpInput } from '@/components/otp-input'
 import { ShieldCheck, CheckCircle2, X, Loader2, AlertCircle } from 'lucide-react'
@@ -17,12 +17,17 @@ function newKey() {
   return (globalThis.crypto?.randomUUID?.() ?? `cp-${Date.now()}-${Math.random()}`)
 }
 
+/** Stop polling after ~60s. A deposit status is only 'initiated' | 'settled' (never 'failed'),
+ *  so without a cap a stuck/abandoned deposit would spin the 'Confirming…' screen forever. */
+const MAX_POLLS = 30
+
 function PayInner() {
   const params = useSearchParams()
   const fundId = params.get('fund') ?? ''
   const isDeposit = params.get('kind') === 'deposit'
   const { data: me } = useMe()
   const { data: fund, isLoading } = useFund(fundId)
+  const qc = useQueryClient()
 
   const [step, setStep] = useState<Step>('confirm')
   const [idemKey, setIdemKey] = useState(newKey)
@@ -30,6 +35,7 @@ function PayInner() {
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<ContributionResult | DepositResult | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
+  const [polls, setPolls] = useState(0)
 
   const externalref = result?.externalref ?? null
 
@@ -45,15 +51,25 @@ function PayInner() {
 
   useEffect(() => {
     if (!poll) return
-    if (poll.status === 'settled') setStep('success')
-    else if (poll.status === 'failed') {
+    if (poll.status === 'settled') { setStep('success'); return }
+    if (poll.status === 'failed') {
       setErrorMsg('The payment failed. Please try again.')
       setStep('error')
+      return
     }
+    // Still pending — cap polling so a stuck payment doesn't spin forever.
+    setPolls((n) => {
+      if (n + 1 >= MAX_POLLS) {
+        setErrorMsg('This is taking longer than usual — it may still complete. Check the fund page in a moment.')
+        setStep('error')
+      }
+      return n + 1
+    })
   }, [poll])
 
   async function submit(otpcode?: string) {
     setBusy(true)
+    setPolls(0)
     try {
       const res = isDeposit
         ? await api.deposits.initiate(fundId, idemKey, otpcode)
@@ -74,10 +90,14 @@ function PayInner() {
   }
 
   function retry() {
+    // Drop any stale cached status for this externalref so a re-initiated payment polls fresh
+    // (the externalref is deterministic, so the cache would otherwise echo the prior 'failed').
+    if (externalref) qc.removeQueries({ queryKey: [isDeposit ? 'deposit' : 'contrib', externalref] })
     setIdemKey(newKey())
     setOtp('')
     setResult(null)
     setErrorMsg('')
+    setPolls(0)
     setStep('confirm')
   }
 
