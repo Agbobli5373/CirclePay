@@ -7,6 +7,7 @@ import { pinSchema } from '@circlepay/shared'
 import { PinInput } from './pin-input'
 import { useChangePin } from '@/lib/queries'
 import { ApiError } from '@/lib/api'
+import { useBodyScrollLock } from '@/lib/use-body-scroll-lock'
 
 type Step = 'current' | 'new' | 'confirm'
 
@@ -37,6 +38,7 @@ export function ChangePinDialog({ open, onClose }: { open: boolean; onClose: () 
     onClose()
   }
 
+  useBodyScrollLock(open)
   // Escape to close
   useEffect(() => {
     if (!open) return

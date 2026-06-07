@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { Loader2 } from 'lucide-react'
+import { useBodyScrollLock } from '@/lib/use-body-scroll-lock'
 
 interface ConfirmDialogProps {
   open: boolean
@@ -31,28 +32,27 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  useBodyScrollLock(open)
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel()
+      if (e.key === 'Escape' && !busy) onCancel()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, onCancel])
+  }, [open, busy, onCancel])
 
   if (!open) return null
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/40 p-4 sm:items-center"
-      onClick={() => !busy && onCancel()}
+      className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-foreground/40 p-4 sm:items-center"
       role="presentation"
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        onClick={(e) => e.stopPropagation()}
         className="w-full max-w-sm space-y-4 rounded-2xl border border-border bg-card p-5 shadow-md"
       >
         <div className="space-y-1.5">

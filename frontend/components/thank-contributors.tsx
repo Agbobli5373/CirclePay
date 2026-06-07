@@ -5,12 +5,14 @@ import { toast } from 'sonner'
 import { Heart, Loader2, X } from 'lucide-react'
 import { useThankContributors } from '@/lib/queries'
 import { ApiError } from '@/lib/api'
+import { useBodyScrollLock } from '@/lib/use-body-scroll-lock'
 
 /** Organizer tool: send a warm thank-you SMS to everyone who has contributed (optional note). */
 export function ThankContributors({ fundraiserId, disabled }: { fundraiserId: string; disabled?: boolean }) {
   const thank = useThankContributors(fundraiserId)
   const [open, setOpen] = useState(false)
   const [note, setNote] = useState('')
+  useBodyScrollLock(open)
 
   async function send() {
     try {
