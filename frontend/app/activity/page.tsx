@@ -70,13 +70,13 @@ export default function ActivityPage() {
 
   return (
     <AppShell currentPage="activity">
-      <div className="max-w-5xl mx-auto space-y-6 pb-6">
+      <div className="space-y-6 pb-6">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Activity</h1>
           <p className="text-secondary mt-1">Your contributions, payouts and donations</p>
         </div>
 
-        <div className="lg:grid lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-6 lg:items-start space-y-6 lg:space-y-0">
+        <div className="lg:grid lg:grid-cols-[300px_minmax(0,1fr)] lg:gap-8 lg:items-start space-y-6 lg:space-y-0">
           {/* Left rail: overview + filters */}
           <aside className="space-y-4 lg:sticky lg:top-24">
             {hasActivity && (
