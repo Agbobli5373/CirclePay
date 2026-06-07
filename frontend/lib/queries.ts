@@ -126,6 +126,14 @@ export function useReleasePayout(id: string) {
   })
 }
 
+export function useCloseFundraiser(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.fundraisers.close(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['fundraiser', id] }),
+  })
+}
+
 export function useFundraiserInvites(id: string) {
   return useQuery({ queryKey: ['fundraiser-invites', id], queryFn: () => api.fundraisers.invites(id), enabled: !!id })
 }

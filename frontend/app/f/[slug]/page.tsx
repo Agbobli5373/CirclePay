@@ -48,6 +48,7 @@ export default function PublicFundraiserPage() {
   }
 
   const isIndividual = f.payoutRoute === 'individual_cash'
+  const closed = f.status === 'completed'
   const badge = VERIFY_BADGE[f.verificationStatus] ?? VERIFY_BADGE.pending
   const shareUrl = typeof window !== 'undefined' ? window.location.href : ''
   const shareMsg = `Help ${f.beneficiary}: ${f.name}. Give via CirclePay: ${shareUrl}`
@@ -93,7 +94,12 @@ export default function PublicFundraiserPage() {
             </div>
             <p className="text-sm text-secondary">{f.contributors.length} contributor{f.contributors.length === 1 ? '' : 's'}</p>
 
-            {!donateOpen ? (
+            {closed ? (
+              <div className="rounded-xl bg-primary/5 p-4 text-center">
+                <p className="text-sm font-medium text-foreground">This fundraiser has closed.</p>
+                <p className="text-xs text-secondary mt-1">{formatGhs(f.raised)} was raised for {f.beneficiary}. Medaase to everyone who gave!</p>
+              </div>
+            ) : !donateOpen ? (
               <button onClick={() => setDonateOpen(true)} className="cp-btn-primary w-full">
                 <Heart className="h-4 w-4" /> Donate
               </button>

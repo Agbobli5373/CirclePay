@@ -193,13 +193,15 @@ export interface PublicFundraiser {
   deadline: string | null
   payoutRoute: 'hospital_momo' | 'hospital_bank' | 'individual_cash'
   verificationStatus: 'unverified' | 'pending' | 'verified' | 'rejected'
+  status: string
   contributors: DonorView[]
 }
 export interface Fundraiser extends PublicFundraiser {
   id: string
-  status: string
   isOwner: boolean
   payeeName: string | null
+  released: number
+  releasable: number
 }
 export interface MyFundraiser {
   id: string
@@ -321,6 +323,7 @@ export const api = {
       request<{ ok: true; verificationStatus: string }>(`/fundraisers/${id}/verify-payee`, { method: 'POST', body: { decision, note } }),
     release: (id: string) =>
       request<{ ok: true; externalref: string; amount: number }>(`/fundraisers/${id}/release`, { method: 'POST' }),
+    close: (id: string) => request<{ ok: true }>(`/fundraisers/${id}/close`, { method: 'POST' }),
     invite: (id: string, phones: string[]) =>
       request<{ invited: number }>(`/fundraisers/${id}/invites`, { method: 'POST', body: { phones } }),
     invites: (id: string) => request<FundraiserInvite[]>(`/fundraisers/${id}/invites`),

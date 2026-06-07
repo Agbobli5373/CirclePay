@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { AppShell } from '@/components/app-shell'
 import { BadgeCheck, ShieldCheck, Copy, Loader2, AlertCircle, CheckCircle2, Banknote, Clock, ChevronLeft } from 'lucide-react'
 import { formatGhs } from '@circlepay/shared'
-import { useFundraiser, useMe, useVerifyPayee, useReleasePayout } from '@/lib/queries'
+import { useFundraiser, useMe, useVerifyPayee, useReleasePayout, useCloseFundraiser } from '@/lib/queries'
 import { ApiError } from '@/lib/api'
 import { FundraiserInvites } from '@/components/fundraiser-invites'
 import { ThankContributors } from '@/components/thank-contributors'
@@ -25,6 +25,7 @@ export default function FundraiserDetailPage() {
   const { data: f, isLoading, isError } = useFundraiser(id)
   const verify = useVerifyPayee(id)
   const release = useReleasePayout(id)
+  const close = useCloseFundraiser(id)
   const [busy, setBusy] = useState(false)
 
   if (isLoading) {
@@ -47,7 +48,7 @@ export default function FundraiserDetailPage() {
   const isIndividual = f.payoutRoute === 'individual_cash'
   const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/f/${f.slug}` : `/f/${f.slug}`
   // Individual (personal MoMo) payouts release without ops verification; hospital routes need it.
-  const canRelease = f.isOwner && !completed && f.raised > 0 && (isIndividual || f.verificationStatus === 'verified')
+  const canRelease = f.isOwner && !completed && f.releasable > 0 && (isIndividual || f.verificationStatus === 'verified')
   const showOps = !!me?.isOpsAdmin && !isIndividual && f.verificationStatus !== 'verified' && !completed
 
   async function onVerify(decision: 'verified' | 'rejected') {
@@ -62,13 +63,25 @@ export default function FundraiserDetailPage() {
     }
   }
   async function onRelease() {
-    if (!confirm(`Release ${formatGhs(f!.raised)} to ${f!.payeeName ?? 'the payee'}?`)) return
+    if (!confirm(`Release ${formatGhs(f!.releasable)} to ${f!.payeeName ?? 'the payee'}?`)) return
     setBusy(true)
     try {
       const r = await release.mutateAsync()
       toast.success(`Releasing ${formatGhs(r.amount)} to ${f!.payeeName ?? 'the payee'}`)
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Could not release payout')
+    } finally {
+      setBusy(false)
+    }
+  }
+  async function onClose() {
+    if (!confirm('Close this fundraiser? No more donations will be accepted.')) return
+    setBusy(true)
+    try {
+      await close.mutateAsync()
+      toast.success('Fundraiser closed')
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Could not close the fundraiser')
     } finally {
       setBusy(false)
     }
@@ -120,28 +133,38 @@ export default function FundraiserDetailPage() {
             </div>
           </div>
 
-          {/* Organizer: release */}
+          {/* Organizer: release + close */}
           {f.isOwner && !completed && (
-            <button onClick={onRelease} disabled={!canRelease || busy} className="cp-btn-primary w-full">
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : (<><Banknote className="h-4 w-4" /> Release {formatGhs(f.raised)} to {isIndividual ? (f.payeeName || 'the payee') : 'hospital'}</>)}
-            </button>
-          )}
-          {f.isOwner && !completed && !canRelease && (
-            <p className="text-xs text-secondary flex items-center gap-1.5">
-              <Clock className="h-3.5 w-3.5" />
-              {f.raised <= 0
-                ? 'No funds raised yet — release opens once a donation comes in.'
-                : 'Waiting for ops to verify the payee before you can release funds.'}
-            </p>
-          )}
-          {f.isOwner && !completed && isIndividual && (
-            <p className="text-xs text-secondary flex items-start gap-1.5">
-              <ShieldCheck className="h-3.5 w-3.5 text-primary flex-shrink-0 mt-0.5" />
-              Pays out to the MoMo number you entered ({f.payeeName || '—'}). You can release any time — no review needed.
-            </p>
+            <div className="space-y-2">
+              {f.released > 0 && (
+                <p className="text-xs text-primary flex items-center gap-1.5">
+                  <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0" /> {formatGhs(f.released)} already sent to {f.payeeName ?? 'the payee'}.
+                </p>
+              )}
+              <button onClick={onRelease} disabled={!canRelease || busy} className="cp-btn-primary w-full">
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : (<><Banknote className="h-4 w-4" /> Release {formatGhs(f.releasable)} to {isIndividual ? (f.payeeName || 'the payee') : 'hospital'}</>)}
+              </button>
+              {!canRelease && (
+                <p className="text-xs text-secondary flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5 flex-shrink-0" />
+                  {f.releasable <= 0
+                    ? (f.released > 0 ? 'All funds raised so far have been released.' : 'No funds raised yet — release opens once a donation comes in.')
+                    : 'Waiting for ops to verify the payee before you can release funds.'}
+                </p>
+              )}
+              {isIndividual && f.releasable > 0 && (
+                <p className="text-xs text-secondary flex items-start gap-1.5">
+                  <ShieldCheck className="h-3.5 w-3.5 text-primary flex-shrink-0 mt-0.5" />
+                  Pays out to the MoMo number you entered ({f.payeeName || '—'}). Release any time — no review needed.
+                </p>
+              )}
+              <button onClick={onClose} disabled={busy} className="cp-btn-ghost w-full">Close fundraiser</button>
+            </div>
           )}
           {completed && (
-            <p className="text-sm text-primary flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4" /> Funds released to {f.payeeName ?? 'the payee'}.</p>
+            <p className="text-sm text-primary flex items-center gap-1.5">
+              <CheckCircle2 className="h-4 w-4 flex-shrink-0" /> Closed · {formatGhs(f.released)} sent to {f.payeeName ?? 'the payee'}{f.released < f.raised ? ` of ${formatGhs(f.raised)} raised` : ''}.
+            </p>
           )}
 
           {/* Ops: verify */}

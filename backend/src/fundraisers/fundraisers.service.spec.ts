@@ -103,10 +103,16 @@ describe('FundraisersService.release', () => {
   function fund(over: Record<string, unknown> = {}) {
     return { id: 'f1', createdById: 'u1', fundraiser: { verificationStatus: 'verified', raised: 100000, payoutRoute: 'hospital_bank', payeeBank: 'ACC', payeeMomo: null }, ...over }
   }
-  function db(f: unknown, tranche: unknown = null) {
+  function db(f: unknown, opts: { raised?: number; tranches?: Array<{ amount: number; status: string }> } = {}) {
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      fundraiserDetail: { findUnique: jest.fn().mockResolvedValue({ raised: opts.raised ?? 100000 }) },
+      payoutTranche: { findMany: jest.fn().mockResolvedValue(opts.tranches ?? []), create: jest.fn().mockResolvedValue({}) },
+    }
     return {
       fund: { findUnique: jest.fn().mockResolvedValue(f) },
-      payoutTranche: { findUnique: jest.fn().mockResolvedValue(tranche), create: jest.fn().mockResolvedValue({ amount: 100000 }), update: jest.fn().mockResolvedValue({}) },
+      $transaction: jest.fn(async (cb: (t: unknown) => unknown) => cb(tx)),
+      payoutTranche: { update: jest.fn().mockResolvedValue({}) },
     }
   }
 
@@ -121,25 +127,14 @@ describe('FundraisersService.release', () => {
   })
 
   it('releases an individual MoMo payout WITHOUT ops verification', async () => {
-    const d = db(
-      fund({
-        fundraiser: {
-          verificationStatus: 'unverified',
-          raised: 100000,
-          payoutRoute: 'individual_cash',
-          payeeMomo: '+233240000002',
-          payeeNetwork: 'Telecel',
-          payeeBank: null,
-        },
-      }),
-    )
+    const d = db(fund({ fundraiser: { verificationStatus: 'unverified', raised: 100000, payoutRoute: 'individual_cash', payeeMomo: '+233240000002', payeeNetwork: 'Telecel', payeeBank: null } }))
     const { svc, moolre } = makeSvc(d)
     const out = await svc.release('u1', 'f1')
     expect(out).toMatchObject({ ok: true, externalref: 'mp:f1:1', amount: 100000 })
     expect(moolre.transfer).toHaveBeenCalledWith(expect.objectContaining({ channel: '6', receiver: '233240000002' })) // Telecel
   })
 
-  it('transfers and marks the tranche released when verified', async () => {
+  it('transfers the full balance and marks the tranche released', async () => {
     const d = db(fund())
     const { svc, moolre } = makeSvc(d)
     const out = await svc.release('u1', 'f1')
@@ -148,10 +143,18 @@ describe('FundraisersService.release', () => {
     expect(d.payoutTranche.update).toHaveBeenCalledWith(expect.objectContaining({ data: { status: 'released' } }))
   })
 
-  it('is idempotent when the tranche is already released', async () => {
-    const { svc, moolre } = makeSvc(db(fund(), { status: 'released', amount: 100000 }))
+  it('releases only the new balance as the next tranche (repeat release)', async () => {
+    const d = db(fund(), { raised: 100000, tranches: [{ amount: 40000, status: 'settled' }] })
+    const { svc, moolre } = makeSvc(d)
     const out = await svc.release('u1', 'f1')
-    expect(out).toMatchObject({ ok: true, amount: 100000 })
+    expect(out).toMatchObject({ ok: true, externalref: 'mp:f1:2', amount: 60000 }) // 100000 − 40000
+    expect(moolre.transfer).toHaveBeenCalledWith(expect.objectContaining({ amount: '600.00' }))
+  })
+
+  it('refuses to release when everything raised is already paid out (409)', async () => {
+    const d = db(fund(), { raised: 100000, tranches: [{ amount: 100000, status: 'released' }] })
+    const { svc, moolre } = makeSvc(d)
+    await expect(svc.release('u1', 'f1')).rejects.toMatchObject({ response: { code: 'NOTHING_TO_RELEASE' } })
     expect(moolre.transfer).not.toHaveBeenCalled()
   })
 })
@@ -177,11 +180,11 @@ describe('FundraisersService settlement handlers', () => {
     expect(tx.fundraiserDetail.update).toHaveBeenCalledWith(expect.objectContaining({ data: { raised: { increment: 5000 } } }))
   })
 
-  it('settleMedicalPayout posts balanced ledger, settles the tranche, completes the fund', async () => {
+  it('settleMedicalPayout posts balanced ledger + settles the tranche, but does NOT complete the fund', async () => {
     const tx = {
       $queryRaw: jest.fn().mockResolvedValue([]),
       payoutTranche: { findUnique: jest.fn().mockResolvedValue({ status: 'released' }), update: jest.fn().mockResolvedValue({}) },
-      fund: { update: jest.fn().mockResolvedValue({ createdById: 'u1' }) },
+      fund: { findUnique: jest.fn().mockResolvedValue({ createdById: 'u1' }), update: jest.fn() },
       activityItem: { create: jest.fn().mockResolvedValue({}) },
     }
     const db = {
@@ -193,7 +196,27 @@ describe('FundraisersService settlement handlers', () => {
     await svc.settleMedicalPayout('mp:f1:1')
     const postings = ledger.post.mock.calls[0][0].postings as Array<{ amount: number }>
     expect(postings.reduce((s, p) => s + p.amount, 0)).toBe(0)
-    expect(tx.fund.update).toHaveBeenCalledWith(expect.objectContaining({ data: { status: 'completed' } }))
+    expect(tx.payoutTranche.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'settled' }) }))
+    expect(tx.fund.update).not.toHaveBeenCalled() // releasing a tranche no longer closes the fund
+  })
+})
+
+describe('FundraisersService.closeFundraiser', () => {
+  it('marks the fund completed (organizer only)', async () => {
+    const update = jest.fn().mockResolvedValue({})
+    const db = {
+      fund: { findUnique: jest.fn().mockResolvedValue({ id: 'f1', createdById: 'u1', status: 'active', fundraiser: { slug: 's' }, createdBy: { name: 'Ama' } }), update },
+    }
+    const { svc } = makeSvc(db)
+    const out = await svc.closeFundraiser('u1', 'f1')
+    expect(out).toEqual({ ok: true })
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: { status: 'completed' } }))
+  })
+
+  it('rejects a non-organizer with 403', async () => {
+    const db = { fund: { findUnique: jest.fn().mockResolvedValue({ id: 'f1', createdById: 'u1', fundraiser: { slug: 's' }, createdBy: { name: 'Ama' } }), update: jest.fn() } }
+    const { svc } = makeSvc(db)
+    await expect(svc.closeFundraiser('intruder', 'f1')).rejects.toMatchObject({ response: { code: 'FORBIDDEN' } })
   })
 })
 

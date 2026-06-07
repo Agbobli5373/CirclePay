@@ -224,23 +224,30 @@ export class FundraisersService implements OnModuleInit {
       throw new BadRequestException({ code: 'NOTHING_TO_RELEASE', message: 'No funds have been raised yet' })
     }
 
-    const externalref = `mp:${fundId}:1`
-    const existing = await this.db.payoutTranche.findUnique({ where: { externalref } })
-    if (existing && (existing.status === 'released' || existing.status === 'settled')) {
-      return { ok: true as const, externalref, amount: existing.amount } // idempotent
-    }
-
-    const amount = fr.raised
-    const tranche =
-      existing ??
-      (await this.db.payoutTranche.create({ data: { fundId, amount, externalref, status: 'held' } }))
+    // Reserve the available balance (raised − everything already paid out) as a new indexed tranche,
+    // serialized per fund so two clicks can't double-release. Releasing does NOT close the
+    // fundraiser — the organizer can release again later, or close it explicitly.
+    const reserved = await this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Fund" WHERE id = ${fundId} FOR UPDATE`
+      const fresh = await tx.fundraiserDetail.findUnique({ where: { fundId }, select: { raised: true } })
+      const tranches = await tx.payoutTranche.findMany({ where: { fundId }, select: { amount: true, status: true } })
+      const committed = tranches.filter((t) => t.status !== 'refunded').reduce((s, t) => s + t.amount, 0)
+      const available = (fresh?.raised ?? 0) - committed
+      if (available <= 0) {
+        throw new ConflictException({ code: 'NOTHING_TO_RELEASE', message: 'All raised funds have already been released' })
+      }
+      const externalref = `mp:${fundId}:${tranches.length + 1}`
+      await tx.payoutTranche.create({ data: { fundId, amount: available, externalref, status: 'held' } })
+      return { externalref, amount: available }
+    })
+    const { externalref, amount } = reserved
 
     // Best-effort float guard.
     try {
       const bal = await this.moolre.getBalance()
-      const available = Number(bal.data?.balance ?? 0) * 100
-      if (available > 0 && available < amount) {
-        this.logger.error(`HOLD medical payout ${externalref}: float ${available} < ${amount}`)
+      const floatAvail = Number(bal.data?.balance ?? 0) * 100
+      if (floatAvail > 0 && floatAvail < amount) {
+        this.logger.error(`HOLD medical payout ${externalref}: float ${floatAvail} < ${amount}`)
         throw new Error('INSUFFICIENT_FLOAT')
       }
     } catch (err) {
@@ -258,10 +265,16 @@ export class FundraisersService implements OnModuleInit {
       sublistid: process.env.MOOLRE_SUBLIST_ID ?? '',
     })
     await this.db.payoutTranche.update({ where: { externalref }, data: { status: 'released' } })
-    void tranche
     void res
     this.logger.log(`Released medical payout ${externalref} → ${amount} pesewas`)
     return { ok: true as const, externalref, amount }
+  }
+
+  /** Organizer: mark the fundraiser complete — stops new donations. (Releasing no longer auto-closes.) */
+  async closeFundraiser(userId: string, fundId: string) {
+    await this.assertOrganizer(fundId, userId)
+    await this.db.fund.update({ where: { id: fundId }, data: { status: 'completed' } })
+    return { ok: true as const }
   }
 
   // ---------- EM — invite family/friends to contribute, remind, thank ----------
@@ -434,7 +447,7 @@ export class FundraisersService implements OnModuleInit {
     const fund = await this.db.fund.findUnique({
       where: { id: fundId },
       include: {
-        fundraiser: true,
+        fundraiser: { include: { tranches: { select: { amount: true, status: true } } } },
         contributors: { where: { status: 'settled' }, orderBy: { ts: 'desc' }, take: 50 },
       },
     })
@@ -517,10 +530,11 @@ export class FundraisersService implements OnModuleInit {
       if (!fresh || fresh.status === 'settled') return
       await this.ledger.post({ kind: 'payout', externalref, postings }, tx)
       await tx.payoutTranche.update({ where: { externalref }, data: { status: 'settled', releasedAt: new Date() } })
-      const fund = await tx.fund.update({ where: { id: tranche.fundId }, data: { status: 'completed' } })
+      // A settled payout does NOT complete the fundraiser — the organizer closes it explicitly.
+      const fund = await tx.fund.findUnique({ where: { id: tranche.fundId }, select: { createdById: true } })
       await tx.activityItem.create({
         data: {
-          userId: fund.createdById,
+          userId: fund?.createdById ?? '',
           type: 'payout',
           title: 'Payout sent',
           detail: 'Funds released to the payee',
@@ -560,7 +574,7 @@ export class FundraisersService implements OnModuleInit {
   }
 
   private toPublic(
-    fr: { slug: string; beneficiary: string; hospital: string | null; story: string | null; goal: number; raised: number; deadline: Date | null; payoutRoute: string; verificationStatus: string; fund: { name: string } },
+    fr: { slug: string; beneficiary: string; hospital: string | null; story: string | null; goal: number; raised: number; deadline: Date | null; payoutRoute: string; verificationStatus: string; fund: { name: string; status: string } },
     contributors: Array<{ displayName: string; amount: number; ts: Date }>,
   ) {
     return {
@@ -575,22 +589,26 @@ export class FundraisersService implements OnModuleInit {
       deadline: fr.deadline,
       payoutRoute: fr.payoutRoute,
       verificationStatus: fr.verificationStatus,
+      status: fr.fund.status,
       contributors: contributors.map((c) => ({ displayName: c.displayName, amount: c.amount, ts: c.ts })),
     }
   }
 
   private toDetail(
     fund: { id: string; name: string; status: string; createdById: string },
-    fr: { slug: string; beneficiary: string; hospital: string | null; story: string | null; goal: number; raised: number; deadline: Date | null; payoutRoute: string; verificationStatus: string; payeeName: string | null },
+    fr: { slug: string; beneficiary: string; hospital: string | null; story: string | null; goal: number; raised: number; deadline: Date | null; payoutRoute: string; verificationStatus: string; payeeName: string | null; tranches?: Array<{ amount: number; status: string }> },
     userId: string,
     contributors: Array<{ displayName: string; amount: number; ts: Date }>,
   ) {
+    const released = (fr.tranches ?? []).filter((t) => t.status !== 'refunded').reduce((s, t) => s + t.amount, 0)
     return {
-      ...this.toPublic({ ...fr, fund: { name: fund.name } }, contributors),
+      ...this.toPublic({ ...fr, fund: { name: fund.name, status: fund.status } }, contributors),
       id: fund.id,
       status: fund.status,
       isOwner: fund.createdById === userId,
       payeeName: fr.payeeName,
+      released,
+      releasable: Math.max(0, fr.raised - released),
     }
   }
 }

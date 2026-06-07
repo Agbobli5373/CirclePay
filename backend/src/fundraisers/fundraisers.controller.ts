@@ -62,6 +62,14 @@ export class FundraisersController {
     return this.fundraisers.release(user.id, id)
   }
 
+  @Post(':id/close')
+  @ApiOperation({ summary: 'Close the fundraiser — stops new donations (organizer only)' })
+  @ApiOkResponse({ description: '{ ok }' })
+  @ApiForbiddenResponse({ description: 'FORBIDDEN — organizer only' })
+  close(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.fundraisers.closeFundraiser(user.id, id)
+  }
+
   @Post(':id/invites')
   @ApiOperation({ summary: 'Invite family/friends to contribute (SMS with the donate link) — organizer only' })
   @ApiOkResponse({ description: '{ invited }' })
