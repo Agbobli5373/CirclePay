@@ -1,7 +1,15 @@
 import type { RedisService } from '../redis/redis.service'
 
-/** Where a USSD session currently is in the menu tree. Phase 2 adds pay/join steps. */
-export type UssdStep = 'pin' | 'main' | 'susu_list' | 'susu_detail' | 'standing'
+/** Where a USSD session currently is in the menu tree. */
+export type UssdStep =
+  | 'pin'
+  | 'main'
+  | 'susu_list'
+  | 'susu_detail'
+  | 'standing'
+  | 'pay_pick'
+  | 'pay_otp'
+  | 'join_list'
 
 export interface UssdSession {
   step: UssdStep
@@ -13,6 +21,8 @@ export interface UssdSession {
   list?: { id: string; name: string }[]
   /** The fund a sub-flow is acting on. */
   fundId?: string
+  /** Idempotency key for an in-progress Pay (reused across the OTP resubmit). */
+  payKey?: string
 }
 
 /**

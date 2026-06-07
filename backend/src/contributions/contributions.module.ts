@@ -12,5 +12,6 @@ import { ContributionSettlementService } from './contributions.settlement'
 @Module({
   controllers: [ContributionsController],
   providers: [ContributionsService, ContributionSettlementService],
+  exports: [ContributionsService], // consumed by the USSD channel (edge module)
 })
 export class ContributionsModule {}

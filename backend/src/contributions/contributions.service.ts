@@ -49,6 +49,7 @@ export class ContributionsService {
     userId: string,
     dto: InitiateContributionDto,
     idempotencyKey: string | undefined,
+    opts?: { sessionid?: string },
   ): Promise<InitiateResult> {
     if (!idempotencyKey) {
       throw new BadRequestException({
@@ -104,6 +105,7 @@ export class ContributionsService {
         amount: ghs(total),
         externalref,
         otpcode: dto.otpcode,
+        sessionid: opts?.sessionid, // USSD-native approval ties the collect to the live session
       })
 
       if (result.otpRequired) {
