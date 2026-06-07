@@ -141,6 +141,12 @@ export default function Home() {
                   />
                 ))}
 
+              {/* Medical fundraisers live in the same grid — the card's own badge marks the type.
+                  Capped here so the dashboard stays a summary; "View all" shows the rest. */}
+              {(medical ?? []).slice(0, 4).map((m) => (
+                <MedicalFundCard key={m.id} f={m} />
+              ))}
+
               {/* Quiet create tile */}
               <Link
                 href="/create"
@@ -179,20 +185,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Medical fundraisers you organize */}
-        {(medical?.length ?? 0) > 0 && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold text-foreground">Medical fundraisers</h3>
-              <Link href="/funds" className="text-xs text-primary font-medium hover:underline">View all</Link>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
-              {medical!.slice(0, 3).map((m) => (
-                <MedicalFundCard key={m.id} f={m} />
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </AppShell>
   )
