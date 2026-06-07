@@ -2,6 +2,7 @@ import { FundraisersService } from './fundraisers.service'
 
 const dispatcher = { register: jest.fn() }
 const notifications = { sendSms: jest.fn().mockResolvedValue(undefined) }
+const config = { get: jest.fn().mockReturnValue('http://localhost:3000') }
 
 function ledgerMock() {
   return {
@@ -20,7 +21,7 @@ function moolreMock(over: Record<string, unknown> = {}) {
 }
 function makeSvc(db: unknown, moolre = moolreMock(), ledger = ledgerMock()) {
   return {
-    svc: new FundraisersService(db as never, moolre as never, ledger as never, notifications as never, dispatcher as never),
+    svc: new FundraisersService(db as never, moolre as never, ledger as never, notifications as never, dispatcher as never, config as never),
     moolre,
     ledger,
   }
@@ -119,6 +120,25 @@ describe('FundraisersService.release', () => {
     await expect(svc.release('u1', 'f1')).rejects.toMatchObject({ response: { code: 'PAYEE_UNVERIFIED' } })
   })
 
+  it('releases an individual MoMo payout WITHOUT ops verification', async () => {
+    const d = db(
+      fund({
+        fundraiser: {
+          verificationStatus: 'unverified',
+          raised: 100000,
+          payoutRoute: 'individual_cash',
+          payeeMomo: '+233240000002',
+          payeeNetwork: 'Telecel',
+          payeeBank: null,
+        },
+      }),
+    )
+    const { svc, moolre } = makeSvc(d)
+    const out = await svc.release('u1', 'f1')
+    expect(out).toMatchObject({ ok: true, externalref: 'mp:f1:1', amount: 100000 })
+    expect(moolre.transfer).toHaveBeenCalledWith(expect.objectContaining({ channel: '6', receiver: '233240000002' })) // Telecel
+  })
+
   it('transfers and marks the tranche released when verified', async () => {
     const d = db(fund())
     const { svc, moolre } = makeSvc(d)
@@ -174,5 +194,37 @@ describe('FundraisersService settlement handlers', () => {
     const postings = ledger.post.mock.calls[0][0].postings as Array<{ amount: number }>
     expect(postings.reduce((s, p) => s + p.amount, 0)).toBe(0)
     expect(tx.fund.update).toHaveBeenCalledWith(expect.objectContaining({ data: { status: 'completed' } }))
+  })
+})
+
+describe('FundraisersService.thankContributors', () => {
+  const fund = { id: 'f1', createdById: 'u1', status: 'active', fundraiser: { slug: 's', beneficiary: 'Kofi' }, createdBy: { name: 'Ama' } }
+  it('sends one SMS per distinct contributor phone and marks them thanked', async () => {
+    const updateMany = jest.fn().mockResolvedValue({})
+    const db = {
+      fund: { findUnique: jest.fn().mockResolvedValue(fund) },
+      contributor: {
+        findMany: jest.fn().mockResolvedValue([{ phone: '+233240000001' }, { phone: '+233240000001' }, { phone: '+233240000002' }]),
+        updateMany,
+      },
+    }
+    const { svc } = makeSvc(db)
+    const out = await svc.thankContributors('u1', 'f1', {} as never)
+    expect(out).toEqual({ sent: 2 }) // two distinct phones
+    expect(notifications.sendSms).toHaveBeenCalledTimes(2)
+    expect(updateMany).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('FundraisersService.remindInvite', () => {
+  const fund = { id: 'f1', createdById: 'u1', status: 'active', fundraiser: { slug: 's', beneficiary: 'Kofi' }, createdBy: { name: 'Ama' } }
+  it('refuses to remind someone who already contributed (409)', async () => {
+    const db = {
+      fund: { findUnique: jest.fn().mockResolvedValue(fund) },
+      fundraiserInvite: { findUnique: jest.fn().mockResolvedValue({ id: 'i1', fundId: 'f1', phone: '+233240000001', lastRemindedAt: null }) },
+      contributor: { findFirst: jest.fn().mockResolvedValue({ id: 'c1' }) },
+    }
+    const { svc } = makeSvc(db)
+    await expect(svc.remindInvite('u1', 'f1', 'i1')).rejects.toMatchObject({ response: { code: 'ALREADY_CONTRIBUTED' } })
   })
 })

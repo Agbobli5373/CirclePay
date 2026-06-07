@@ -191,7 +191,7 @@ export interface PublicFundraiser {
   raised: number
   progressPercent: number
   deadline: string | null
-  payoutRoute: 'hospital_momo' | 'hospital_bank'
+  payoutRoute: 'hospital_momo' | 'hospital_bank' | 'individual_cash'
   verificationStatus: 'unverified' | 'pending' | 'verified' | 'rejected'
   contributors: DonorView[]
 }
@@ -212,6 +212,13 @@ export interface MyFundraiser {
   verificationStatus: 'unverified' | 'pending' | 'verified' | 'rejected'
   status: string
 }
+export interface FundraiserInvite {
+  id: string
+  phone: string
+  status: 'invited' | 'contributed'
+  lastRemindedAt: string | null
+  createdAt: string
+}
 export type DonateState = 'otp_required' | 'initiated' | 'settled' | 'failed'
 export interface DonateResult {
   state: DonateState
@@ -225,7 +232,7 @@ export interface CreateMedicalPayload {
   beneficiary: string
   story: string
   hospital?: string
-  payoutRoute: 'hospital_momo' | 'hospital_bank'
+  payoutRoute: 'hospital_momo' | 'hospital_bank' | 'individual_cash'
   payee: { name: string; momo?: string; network?: Network; bank?: string }
   deadline?: string
   shareable: boolean
@@ -314,6 +321,15 @@ export const api = {
       request<{ ok: true; verificationStatus: string }>(`/fundraisers/${id}/verify-payee`, { method: 'POST', body: { decision, note } }),
     release: (id: string) =>
       request<{ ok: true; externalref: string; amount: number }>(`/fundraisers/${id}/release`, { method: 'POST' }),
+    invite: (id: string, phones: string[]) =>
+      request<{ invited: number }>(`/fundraisers/${id}/invites`, { method: 'POST', body: { phones } }),
+    invites: (id: string) => request<FundraiserInvite[]>(`/fundraisers/${id}/invites`),
+    remindInvite: (id: string, inviteId: string) =>
+      request<{ ok: true }>(`/fundraisers/${id}/invites/${inviteId}/remind`, { method: 'POST' }),
+    cancelInvite: (id: string, inviteId: string) =>
+      request<{ ok: true }>(`/fundraisers/${id}/invites/${inviteId}`, { method: 'DELETE' }),
+    thank: (id: string, note?: string) =>
+      request<{ sent: number }>(`/fundraisers/${id}/thank`, { method: 'POST', body: { note } }),
   },
   public: {
     fundraiser: (slug: string) => request<PublicFundraiser>(`/public/fundraisers/${encodeURIComponent(slug)}`),

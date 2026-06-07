@@ -9,6 +9,8 @@ import { BadgeCheck, ShieldCheck, Copy, Loader2, AlertCircle, CheckCircle2, Bank
 import { formatGhs } from '@circlepay/shared'
 import { useFundraiser, useMe, useVerifyPayee, useReleasePayout } from '@/lib/queries'
 import { ApiError } from '@/lib/api'
+import { FundraiserInvites } from '@/components/fundraiser-invites'
+import { ThankContributors } from '@/components/thank-contributors'
 
 const VERIFY: Record<string, { label: string; cls: string }> = {
   verified: { label: 'Payee verified', cls: 'bg-primary/10 text-primary' },
@@ -42,9 +44,11 @@ export default function FundraiserDetailPage() {
 
   const badge = VERIFY[f.verificationStatus] ?? VERIFY.pending
   const completed = f.status === 'completed'
+  const isIndividual = f.payoutRoute === 'individual_cash'
   const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/f/${f.slug}` : `/f/${f.slug}`
-  const canRelease = f.isOwner && f.verificationStatus === 'verified' && !completed && f.raised > 0
-  const showOps = !!me?.isOpsAdmin && f.verificationStatus !== 'verified' && !completed
+  // Individual (personal MoMo) payouts release without ops verification; hospital routes need it.
+  const canRelease = f.isOwner && !completed && f.raised > 0 && (isIndividual || f.verificationStatus === 'verified')
+  const showOps = !!me?.isOpsAdmin && !isIndividual && f.verificationStatus !== 'verified' && !completed
 
   async function onVerify(decision: 'verified' | 'rejected') {
     setBusy(true)
@@ -58,11 +62,11 @@ export default function FundraiserDetailPage() {
     }
   }
   async function onRelease() {
-    if (!confirm(`Release ${formatGhs(f!.raised)} to ${f!.payeeName ?? 'the verified payee'}?`)) return
+    if (!confirm(`Release ${formatGhs(f!.raised)} to ${f!.payeeName ?? 'the payee'}?`)) return
     setBusy(true)
     try {
       const r = await release.mutateAsync()
-      toast.success(`Releasing ${formatGhs(r.amount)} to the hospital`)
+      toast.success(`Releasing ${formatGhs(r.amount)} to ${f!.payeeName ?? 'the payee'}`)
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Could not release payout')
     } finally {
@@ -119,13 +123,21 @@ export default function FundraiserDetailPage() {
           {/* Organizer: release */}
           {f.isOwner && !completed && (
             <button onClick={onRelease} disabled={!canRelease || busy} className="cp-btn-primary w-full">
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : (<><Banknote className="h-4 w-4" /> Release {formatGhs(f.raised)} to hospital</>)}
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : (<><Banknote className="h-4 w-4" /> Release {formatGhs(f.raised)} to {isIndividual ? (f.payeeName || 'the payee') : 'hospital'}</>)}
             </button>
           )}
           {f.isOwner && !completed && !canRelease && (
             <p className="text-xs text-secondary flex items-center gap-1.5">
               <Clock className="h-3.5 w-3.5" />
-              {f.verificationStatus !== 'verified' ? 'Waiting for ops to verify the payee before you can release funds.' : 'No funds raised yet.'}
+              {f.raised <= 0
+                ? 'No funds raised yet — release opens once a donation comes in.'
+                : 'Waiting for ops to verify the payee before you can release funds.'}
+            </p>
+          )}
+          {f.isOwner && !completed && isIndividual && (
+            <p className="text-xs text-secondary flex items-start gap-1.5">
+              <ShieldCheck className="h-3.5 w-3.5 text-primary flex-shrink-0 mt-0.5" />
+              Pays out to the MoMo number you entered ({f.payeeName || '—'}). You can release any time — no review needed.
             </p>
           )}
           {completed && (
@@ -145,6 +157,9 @@ export default function FundraiserDetailPage() {
           )}
         </div>
 
+        {/* Organizer: invite family & friends to contribute */}
+        {f.isOwner && !completed && <FundraiserInvites fundraiserId={f.id} />}
+
         {f.story && (
           <div className="cp-card p-5 space-y-2">
             <h2 className="text-base font-semibold text-foreground">The story</h2>
@@ -153,7 +168,10 @@ export default function FundraiserDetailPage() {
         )}
 
         <div className="cp-card p-5 space-y-3">
-          <h2 className="text-base font-semibold text-foreground">Contributors</h2>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-base font-semibold text-foreground">Contributors</h2>
+            {f.isOwner && f.contributors.length > 0 && <ThankContributors fundraiserId={f.id} />}
+          </div>
           {f.contributors.length === 0 ? (
             <p className="text-sm text-secondary">No donations yet — share the link to get going.</p>
           ) : (
@@ -170,7 +188,11 @@ export default function FundraiserDetailPage() {
 
         <div className="flex items-start gap-2 rounded-xl bg-primary/5 p-4">
           <ShieldCheck className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-secondary leading-relaxed">Funds go straight to the verified payee. CirclePay never holds the money. Powered by Moolre.</p>
+          <p className="text-sm text-secondary leading-relaxed">
+            {isIndividual
+              ? 'Funds go to the MoMo number the organiser entered. CirclePay never holds the money. Powered by Moolre.'
+              : 'Funds go straight to the verified payee. CirclePay never holds the money. Powered by Moolre.'}
+          </p>
         </div>
       </div>
     </AppShell>

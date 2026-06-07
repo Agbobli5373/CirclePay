@@ -47,6 +47,7 @@ export default function PublicFundraiserPage() {
     )
   }
 
+  const isIndividual = f.payoutRoute === 'individual_cash'
   const badge = VERIFY_BADGE[f.verificationStatus] ?? VERIFY_BADGE.pending
   const shareUrl = typeof window !== 'undefined' ? window.location.href : ''
   const shareMsg = `Help ${f.beneficiary}: ${f.name}. Give via CirclePay: ${shareUrl}`
@@ -66,9 +67,15 @@ export default function PublicFundraiserPage() {
         <div className="text-center space-y-4">
           <div className="flex items-center justify-center gap-2">
             <span className="inline-block text-xs font-medium bg-destructive/10 text-destructive rounded-full px-2.5 py-1">Medical</span>
-            <span className={`inline-flex items-center gap-1 text-xs font-medium rounded-full px-2.5 py-1 ${badge.cls}`}>
-              <BadgeCheck className="h-3.5 w-3.5" /> {badge.label}
-            </span>
+            {isIndividual ? (
+              <span className="inline-flex items-center gap-1 text-xs font-medium rounded-full px-2.5 py-1 bg-muted text-secondary">
+                Family fundraiser
+              </span>
+            ) : (
+              <span className={`inline-flex items-center gap-1 text-xs font-medium rounded-full px-2.5 py-1 ${badge.cls}`}>
+                <BadgeCheck className="h-3.5 w-3.5" /> {badge.label}
+              </span>
+            )}
           </div>
           <h1 className="text-2xl font-bold text-foreground">{f.name}</h1>
           {f.hospital && <p className="text-secondary">{f.hospital}</p>}
@@ -140,7 +147,9 @@ export default function PublicFundraiserPage() {
         <div className="flex items-start gap-2 rounded-xl bg-primary/5 p-4">
           <ShieldCheck className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
           <p className="text-sm text-secondary leading-relaxed">
-            Funds go straight to the verified payee. CirclePay never holds the money. Powered by Moolre.
+            {isIndividual
+              ? 'This is a personal appeal — funds go to the organiser’s Mobile Money. CirclePay never holds the money. Powered by Moolre.'
+              : 'Funds go straight to the verified payee. CirclePay never holds the money. Powered by Moolre.'}
           </p>
         </div>
       </main>

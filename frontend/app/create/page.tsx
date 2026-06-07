@@ -38,7 +38,7 @@ export default function CreateFundPage() {
   const [story, setStory] = useState('')
   const [deadline, setDeadline] = useState('')
   const [shareable, setShareable] = useState(true)
-  const [payoutRoute, setPayoutRoute] = useState<'hospital_momo' | 'hospital_bank'>('hospital_bank')
+  const [payoutRoute, setPayoutRoute] = useState<'hospital_momo' | 'hospital_bank' | 'individual_cash'>('hospital_bank')
   const [payeeName, setPayeeName] = useState('')
   const [payeeMomo, setPayeeMomo] = useState('')
   const [payeeNetwork, setPayeeNetwork] = useState<Network>('MTN')
@@ -75,8 +75,8 @@ export default function CreateFundPage() {
           payoutRoute,
           payee: {
             name: payeeName,
-            momo: payoutRoute === 'hospital_momo' ? `+233${payeeMomo}` : undefined,
-            network: payoutRoute === 'hospital_momo' ? payeeNetwork : undefined,
+            momo: payoutRoute === 'hospital_bank' ? undefined : `+233${payeeMomo}`,
+            network: payoutRoute === 'hospital_bank' ? undefined : payeeNetwork,
             bank: payoutRoute === 'hospital_bank' ? payeeBank : undefined,
           },
           deadline: deadline ? new Date(`${deadline}T00:00:00Z`).toISOString() : undefined,
@@ -129,7 +129,7 @@ export default function CreateFundPage() {
   const periodLabel = frequency === 'Weekly' ? 'weeks' : 'months'
   const cyclePot = amountNum > 0 && membersNum > 0 ? amountNum * membersNum : 0
 
-  const payeeOk = payoutRoute === 'hospital_momo' ? payeeMomo.replace(/\D/g, '').length >= 9 : payeeBank.trim().length > 0
+  const payeeOk = payoutRoute === 'hospital_bank' ? payeeBank.trim().length > 0 : payeeMomo.replace(/\D/g, '').length >= 9
   const canSubmit = isSusu
     ? Boolean(name && amountNum > 0 && membersNum > 0)
     : Boolean(name && goalNum > 0 && beneficiary && story && payeeName && payeeOk)
@@ -560,13 +560,16 @@ export default function CreateFundPage() {
 
               {/* Payout route — money goes straight to the verified payee, never the organizer */}
               <Field label="Where do funds go?">
-                <div className="grid grid-cols-2 gap-2">
-                  <Pill active={payoutRoute === 'hospital_bank'} onClick={() => setPayoutRoute('hospital_bank')}>Hospital bank</Pill>
+                <div className="grid gap-2">
+                  <Pill active={payoutRoute === 'hospital_bank'} onClick={() => setPayoutRoute('hospital_bank')}>Hospital bank account</Pill>
                   <Pill active={payoutRoute === 'hospital_momo'} onClick={() => setPayoutRoute('hospital_momo')}>Hospital MoMo</Pill>
+                  <Pill active={payoutRoute === 'individual_cash'} onClick={() => setPayoutRoute('individual_cash')}>A person&apos;s MoMo (family or you)</Pill>
                 </div>
-                <p className="text-xs text-secondary mt-1.5 flex items-center gap-1.5">
-                  <BadgeCheck className="h-3.5 w-3.5 text-primary" />
-                  Ops verifies the payee before any payout. CirclePay never holds the money.
+                <p className="text-xs text-secondary mt-1.5 flex items-start gap-1.5">
+                  <BadgeCheck className="h-3.5 w-3.5 text-primary flex-shrink-0 mt-0.5" />
+                  {payoutRoute === 'individual_cash'
+                    ? 'Goes to the MoMo number you enter — you release it yourself, any time. No review needed.'
+                    : 'Ops verifies the payee before any payout. CirclePay never holds the money.'}
                 </p>
               </Field>
 
@@ -574,7 +577,7 @@ export default function CreateFundPage() {
                 <input
                   value={payeeName}
                   onChange={(e) => setPayeeName(e.target.value)}
-                  placeholder={payoutRoute === 'hospital_bank' ? 'e.g. Korle Bu Teaching Hospital' : 'e.g. Korle Bu MoMo merchant'}
+                  placeholder={payoutRoute === 'hospital_bank' ? 'e.g. Korle Bu Teaching Hospital' : payoutRoute === 'individual_cash' ? 'e.g. Ama Mensah (sister)' : 'e.g. Korle Bu MoMo merchant'}
                   className="cp-input"
                 />
               </Field>
@@ -589,7 +592,7 @@ export default function CreateFundPage() {
                   />
                 </Field>
               ) : (
-                <Field label="Hospital MoMo number">
+                <Field label={payoutRoute === 'individual_cash' ? "Person's MoMo number" : 'Hospital MoMo number'}>
                   <div className="flex items-center h-11 rounded-lg border border-border bg-card px-3 focus-within:border-primary">
                     <span className="text-sm font-medium text-foreground border-r border-border pr-2 mr-2 whitespace-nowrap">🇬🇭 +233</span>
                     <input

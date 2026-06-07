@@ -10,14 +10,21 @@ import {
   HttpStatus,
 } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
+import { ConfigService } from '@nestjs/config'
 import { payoutPostings } from '@circlepay/shared'
 import { PrismaService } from '../prisma/prisma.service'
 import { MoolreService } from '../moolre/moolre.service'
-import { MoolreError } from '../moolre/moolre.client'
+import { MoolreError, TransferChannel } from '../moolre/moolre.client'
 import { LedgerService } from '../ledger/ledger.service'
 import { NotificationsService } from '../notifications/notifications.service'
 import { OutboxDispatcher } from '../outbox/outbox.dispatcher'
-import type { CreateMedicalFundDto, DonateDto, VerifyPayeeDto } from './dto/fundraisers.dto'
+import type {
+  CreateMedicalFundDto,
+  DonateDto,
+  VerifyPayeeDto,
+  InviteContributorsDto,
+  ThankContributorsDto,
+} from './dto/fundraisers.dto'
 
 /** MoMo collection channel per network. */
 function collectionChannel(network: string): '13' | '6' | '7' {
@@ -27,6 +34,12 @@ function collectionChannel(network: string): '13' | '6' | '7' {
 }
 function toMoolrePayer(phone: string): string {
   return phone.replace(/^\+/, '')
+}
+/** Disbursement (transfer) channel for a payee MoMo network; defaults to MTN. */
+function transferChannelFor(network: string | null | undefined): TransferChannel {
+  if (network === 'Telecel') return TransferChannel.Telecel
+  if (network === 'AirtelTigo') return TransferChannel.AirtelTigo
+  return TransferChannel.MTN
 }
 function ghs(pesewas: number): string {
   return (pesewas / 100).toFixed(2)
@@ -58,6 +71,7 @@ export class FundraisersService implements OnModuleInit {
     private readonly ledger: LedgerService,
     private readonly notifications: NotificationsService,
     private readonly dispatcher: OutboxDispatcher,
+    private readonly config: ConfigService,
   ) {}
 
   onModuleInit(): void {
@@ -90,6 +104,7 @@ export class FundraisersService implements OnModuleInit {
                 payeeName: dto.payee.name,
                 payeeMomo: dto.payee.momo,
                 payeeBank: dto.payee.bank,
+                payeeNetwork: dto.payee.network,
                 verificationStatus: 'unverified',
               },
             },
@@ -199,7 +214,10 @@ export class FundraisersService implements OnModuleInit {
       throw new ForbiddenException({ code: 'FORBIDDEN', message: 'Only the organizer can release the payout' })
     }
     const fr = fund.fundraiser
-    if (fr.verificationStatus !== 'verified') {
+    // Hospital routes need ops verification (the trust check). An individual MoMo payout is the
+    // organizer's own call — they entered the number — so it releases without ops review, any time.
+    const needsVerification = fr.payoutRoute === 'hospital_momo' || fr.payoutRoute === 'hospital_bank'
+    if (needsVerification && fr.verificationStatus !== 'verified') {
       throw new ConflictException({ code: 'PAYEE_UNVERIFIED', message: 'The payee must be verified before payout' })
     }
     if (fr.raised <= 0) {
@@ -233,7 +251,7 @@ export class FundraisersService implements OnModuleInit {
 
     const bank = fr.payoutRoute === 'hospital_bank'
     const res = await this.moolre.transfer({
-      channel: bank ? '2' : '1', // bank, else MoMo (MTN default — payee network isn't persisted in MVP)
+      channel: bank ? TransferChannel.Bank : transferChannelFor(fr.payeeNetwork),
       receiver: bank ? fr.payeeBank ?? '' : toMoolrePayer(fr.payeeMomo ?? ''),
       amount: ghs(amount),
       externalref,
@@ -244,6 +262,148 @@ export class FundraisersService implements OnModuleInit {
     void res
     this.logger.log(`Released medical payout ${externalref} → ${amount} pesewas`)
     return { ok: true as const, externalref, amount }
+  }
+
+  // ---------- EM — invite family/friends to contribute, remind, thank ----------
+
+  /** Load the fund + assert the caller organizes it. Returns fund incl. fundraiser + creator name. */
+  private async assertOrganizer(fundId: string, userId: string) {
+    const fund = await this.db.fund.findUnique({
+      where: { id: fundId },
+      include: { fundraiser: true, createdBy: { select: { name: true } } },
+    })
+    if (!fund || !fund.fundraiser) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Fundraiser not found' })
+    if (fund.createdById !== userId) {
+      throw new ForbiddenException({ code: 'FORBIDDEN', message: 'Only the organizer can do this' })
+    }
+    return fund
+  }
+
+  private publicUrl(slug: string): string {
+    const base = this.config.get<string>('APP_BASE_URL') ?? 'http://localhost:3000'
+    return `${base}/f/${slug}`
+  }
+
+  // Ghanaian, warm, non-desperate SMS copy.
+  private inviteSms(inviter: string, beneficiary: string, url: string): string {
+    return `${inviter} is raising funds for ${beneficiary}. Kindly support via CirclePay: ${url}. Medaase!`
+  }
+  private reminderSms(inviter: string, beneficiary: string, url: string): string {
+    return `Reminder: ${inviter} is still raising for ${beneficiary}. Every cedi helps — ${url}. Medaase!`
+  }
+  private thankSms(inviter: string, beneficiary: string, note?: string): string {
+    const extra = note?.trim() ? ` ${note.trim()}` : ''
+    return `Medaase! Thank you for supporting ${beneficiary}.${extra} — ${inviter} via CirclePay.`
+  }
+
+  /** Organizer invites people (family/friends) to contribute — an SMS with the public donate link. */
+  async inviteContributors(userId: string, fundId: string, dto: InviteContributorsDto) {
+    const fund = await this.assertOrganizer(fundId, userId)
+    if (fund.status !== 'active') {
+      throw new ConflictException({ code: 'FUND_INACTIVE', message: 'This fundraiser is closed' })
+    }
+    const inviter = fund.createdBy?.name ?? 'A friend'
+    const url = this.publicUrl(fund.fundraiser!.slug)
+    const beneficiary = fund.fundraiser!.beneficiary
+    const phones = [...new Set(dto.phones)]
+    for (const phone of phones) {
+      await this.db.fundraiserInvite.upsert({
+        where: { fundId_phone: { fundId, phone } },
+        create: { fundId, phone, invitedByName: inviter },
+        update: { invitedByName: inviter },
+      })
+      try {
+        await this.notifications.sendSms(phone, this.inviteSms(inviter, beneficiary, url), `fund-invite:${fundId}`)
+      } catch (err) {
+        this.logger.warn(`Fundraiser invite SMS failed for a recipient: ${(err as Error).message}`)
+      }
+    }
+    return { invited: phones.length }
+  }
+
+  /** Organizer: list invites with derived status (contributed = a settled donation from that phone). */
+  async listInvites(userId: string, fundId: string) {
+    await this.assertOrganizer(fundId, userId)
+    const [invites, settled] = await Promise.all([
+      this.db.fundraiserInvite.findMany({ where: { fundId }, orderBy: { createdAt: 'desc' } }),
+      this.db.contributor.findMany({
+        where: { fundId, status: 'settled', phone: { not: null } },
+        select: { phone: true },
+      }),
+    ])
+    const gave = new Set(settled.map((c) => c.phone as string))
+    return invites.map((i) => ({
+      id: i.id,
+      phone: i.phone,
+      status: gave.has(i.phone) ? ('contributed' as const) : ('invited' as const),
+      lastRemindedAt: i.lastRemindedAt,
+      createdAt: i.createdAt,
+    }))
+  }
+
+  /** Organizer: re-send the invite SMS (manual reminder); skip if they gave; rate-limit once / 3h. */
+  async remindInvite(userId: string, fundId: string, inviteId: string) {
+    const fund = await this.assertOrganizer(fundId, userId)
+    const invite = await this.db.fundraiserInvite.findUnique({ where: { id: inviteId } })
+    if (!invite || invite.fundId !== fundId) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Invite not found' })
+
+    const gave = await this.db.contributor.findFirst({ where: { fundId, status: 'settled', phone: invite.phone } })
+    if (gave) throw new ConflictException({ code: 'ALREADY_CONTRIBUTED', message: 'This person has already contributed' })
+
+    const THREE_HOURS = 3 * 60 * 60 * 1000
+    if (invite.lastRemindedAt && Date.now() - invite.lastRemindedAt.getTime() < THREE_HOURS) {
+      throw new HttpException(
+        { code: 'REMINDED_RECENTLY', message: 'Already reminded recently — try again later' },
+        HttpStatus.TOO_MANY_REQUESTS,
+      )
+    }
+    const inviter = fund.createdBy?.name ?? 'A friend'
+    try {
+      await this.notifications.sendSms(
+        invite.phone,
+        this.reminderSms(inviter, fund.fundraiser!.beneficiary, this.publicUrl(fund.fundraiser!.slug)),
+        `fund-remind:${fundId}`,
+      )
+    } catch (err) {
+      this.logger.warn(`Reminder SMS failed for a recipient: ${(err as Error).message}`)
+    }
+    await this.db.fundraiserInvite.update({ where: { id: inviteId }, data: { lastRemindedAt: new Date() } })
+    return { ok: true as const }
+  }
+
+  /** Organizer: remove an invite. */
+  async cancelInvite(userId: string, fundId: string, inviteId: string) {
+    await this.assertOrganizer(fundId, userId)
+    const invite = await this.db.fundraiserInvite.findUnique({ where: { id: inviteId } })
+    if (!invite || invite.fundId !== fundId) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Invite not found' })
+    await this.db.fundraiserInvite.delete({ where: { id: inviteId } })
+    return { ok: true as const }
+  }
+
+  /** Organizer: send a warm thank-you SMS to each distinct settled contributor (de-duped via thankedAt). */
+  async thankContributors(userId: string, fundId: string, dto: ThankContributorsDto) {
+    const fund = await this.assertOrganizer(fundId, userId)
+    const inviter = fund.createdBy?.name ?? 'The organizer'
+    const beneficiary = fund.fundraiser!.beneficiary
+    const pending = await this.db.contributor.findMany({
+      where: { fundId, status: 'settled', thankedAt: null, phone: { not: null } },
+      select: { phone: true },
+    })
+    const phones = [...new Set(pending.map((c) => c.phone as string))]
+    let sent = 0
+    for (const phone of phones) {
+      try {
+        await this.notifications.sendSms(phone, this.thankSms(inviter, beneficiary, dto.note), `fund-thanks:${fundId}:${phone}`)
+        await this.db.contributor.updateMany({
+          where: { fundId, phone, status: 'settled' },
+          data: { thankedAt: new Date() },
+        })
+        sent++
+      } catch (err) {
+        this.logger.warn(`Thank-you SMS failed for a recipient: ${(err as Error).message}`)
+      }
+    }
+    return { sent }
   }
 
   /** Medical fundraisers the current user organizes (created). For the Funds list + dashboard. */
@@ -362,8 +522,8 @@ export class FundraisersService implements OnModuleInit {
         data: {
           userId: fund.createdById,
           type: 'payout',
-          title: 'Hospital payout sent',
-          detail: 'Funds released to the verified payee',
+          title: 'Payout sent',
+          detail: 'Funds released to the payee',
           amount: tranche.amount,
           direction: 'out_',
           reference: externalref,

@@ -4,11 +4,11 @@ import { phoneSchema, networkSchema } from './auth-schemas'
 /**
  * Medical / emergency fundraising (EM) payload schemas — shared between the Nest
  * backend (createZodDto) and the Next.js create + public-donate flows. Money is
- * integer pesewas. MVP supports institutional routes only; `individual_cash`
- * (escrow + receipt-gated tranches) is deferred to E7/E8 and is intentionally
- * absent from the route enum, so requesting it fails validation.
+ * integer pesewas. Payout routes: the two hospital routes require ops verification
+ * before release; `individual_cash` (a person's MoMo — a family member or the
+ * organizer) is released by the organizer without ops verification.
  */
-export const medicalPayoutRouteSchema = z.enum(['hospital_momo', 'hospital_bank'])
+export const medicalPayoutRouteSchema = z.enum(['hospital_momo', 'hospital_bank', 'individual_cash'])
 
 export const createMedicalFundSchema = z
   .object({
@@ -37,6 +37,14 @@ export const createMedicalFundSchema = z
     message: 'A payee bank account is required for the hospital bank route',
     path: ['payee', 'bank'],
   })
+  .refine((d) => d.payoutRoute !== 'individual_cash' || !!d.payee.momo, {
+    message: 'A MoMo number is required to send to a person',
+    path: ['payee', 'momo'],
+  })
+  .refine((d) => d.payoutRoute !== 'individual_cash' || !!d.payee.network, {
+    message: "Select the payee's MoMo network",
+    path: ['payee', 'network'],
+  })
 
 /** A public donation to a medical fund. donationId (client uuid) keeps the externalref stable across the OTP retry. */
 export const donateSchema = z.object({
@@ -56,6 +64,18 @@ export const verifyPayeeSchema = z.object({
   note: z.string().trim().max(300).optional(),
 })
 
+/** Organizer invites family/friends to contribute (SMS with the public donate link). */
+export const inviteContributorsSchema = z.object({
+  phones: z.array(phoneSchema).min(1, 'Add at least one number').max(20, 'Up to 20 at a time'),
+})
+
+/** Organizer sends a thank-you SMS to all settled contributors. */
+export const thankContributorsSchema = z.object({
+  note: z.string().trim().max(160, 'Keep it short for SMS').optional(),
+})
+
 export type CreateMedicalFundInput = z.infer<typeof createMedicalFundSchema>
 export type DonateInput = z.infer<typeof donateSchema>
 export type VerifyPayeeInput = z.infer<typeof verifyPayeeSchema>
+export type InviteContributorsInput = z.infer<typeof inviteContributorsSchema>
+export type ThankContributorsInput = z.infer<typeof thankContributorsSchema>

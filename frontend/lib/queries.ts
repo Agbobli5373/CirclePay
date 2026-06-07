@@ -126,6 +126,38 @@ export function useReleasePayout(id: string) {
   })
 }
 
+export function useFundraiserInvites(id: string) {
+  return useQuery({ queryKey: ['fundraiser-invites', id], queryFn: () => api.fundraisers.invites(id), enabled: !!id })
+}
+
+export function useInviteContributors(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (phones: string[]) => api.fundraisers.invite(id, phones),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['fundraiser-invites', id] }),
+  })
+}
+
+export function useRemindContributor(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (inviteId: string) => api.fundraisers.remindInvite(id, inviteId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['fundraiser-invites', id] }),
+  })
+}
+
+export function useCancelContributorInvite(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (inviteId: string) => api.fundraisers.cancelInvite(id, inviteId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['fundraiser-invites', id] }),
+  })
+}
+
+export function useThankContributors(id: string) {
+  return useMutation({ mutationFn: (note?: string) => api.fundraisers.thank(id, note) })
+}
+
 export function useUpdateProfile() {
   const qc = useQueryClient()
   return useMutation({
