@@ -6,6 +6,7 @@ import { Bell, Check, X, Loader2, Users } from 'lucide-react'
 import { formatGhs } from '@circlepay/shared'
 import { useMyInvites, useAcceptInvite, useDeclineInvite } from '@/lib/queries'
 import { ApiError, type MyInvite } from '@/lib/api'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 
 /**
  * Bell + dropdown for pending Susu invitations (matched to the user's MoMo number).
@@ -84,6 +85,7 @@ function InviteRow({ inv }: { inv: MyInvite }) {
   const accept = useAcceptInvite()
   const decline = useDeclineInvite()
   const [busy, setBusy] = useState<null | 'accept' | 'decline'>(null)
+  const [confirmDecline, setConfirmDecline] = useState(false)
   const per = `${formatGhs(inv.contribution)}/${inv.frequency === 'weekly' ? 'wk' : 'mo'}`
   const pot = formatGhs(inv.contribution * inv.memberCount)
 
@@ -98,7 +100,6 @@ function InviteRow({ inv }: { inv: MyInvite }) {
     }
   }
   async function onDecline() {
-    if (!confirm(`Decline the invite to "${inv.fundName}"?`)) return
     setBusy('decline')
     try {
       await decline.mutateAsync(inv.id)
@@ -106,6 +107,8 @@ function InviteRow({ inv }: { inv: MyInvite }) {
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Could not decline')
       setBusy(null)
+    } finally {
+      setConfirmDecline(false)
     }
   }
 
@@ -130,13 +133,24 @@ function InviteRow({ inv }: { inv: MyInvite }) {
           {busy === 'accept' ? <Loader2 className="h-4 w-4 animate-spin" /> : (<><Check className="h-4 w-4" /> Accept</>)}
         </button>
         <button
-          onClick={onDecline}
+          onClick={() => setConfirmDecline(true)}
           disabled={busy !== null}
           className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-border px-3 h-9 text-sm font-medium text-secondary hover:text-destructive hover:border-destructive/40 transition-colors disabled:opacity-60"
         >
           {busy === 'decline' ? <Loader2 className="h-4 w-4 animate-spin" /> : (<><X className="h-4 w-4" /> Decline</>)}
         </button>
       </div>
+
+      <ConfirmDialog
+        open={confirmDecline}
+        title="Decline invitation?"
+        message={<>Decline the invite to &ldquo;{inv.fundName}&rdquo;? You can be invited again later.</>}
+        confirmLabel="Decline"
+        danger
+        busy={busy === 'decline'}
+        onConfirm={onDecline}
+        onCancel={() => setConfirmDecline(false)}
+      />
     </li>
   )
 }

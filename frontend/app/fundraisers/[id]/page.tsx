@@ -11,6 +11,7 @@ import { useFundraiser, useMe, useVerifyPayee, useReleasePayout, useCloseFundrai
 import { ApiError } from '@/lib/api'
 import { FundraiserInvites } from '@/components/fundraiser-invites'
 import { ThankContributors } from '@/components/thank-contributors'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 
 const VERIFY: Record<string, { label: string; cls: string }> = {
   verified: { label: 'Payee verified', cls: 'bg-primary/10 text-primary' },
@@ -27,6 +28,7 @@ export default function FundraiserDetailPage() {
   const release = useReleasePayout(id)
   const close = useCloseFundraiser(id)
   const [busy, setBusy] = useState(false)
+  const [confirmAction, setConfirmAction] = useState<null | 'release' | 'close'>(null)
 
   if (isLoading) {
     return <AppShell currentPage="funds"><div className="flex justify-center py-24"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div></AppShell>
@@ -63,7 +65,6 @@ export default function FundraiserDetailPage() {
     }
   }
   async function onRelease() {
-    if (!confirm(`Release ${formatGhs(f!.releasable)} to ${f!.payeeName ?? 'the payee'}?`)) return
     setBusy(true)
     try {
       const r = await release.mutateAsync()
@@ -72,10 +73,10 @@ export default function FundraiserDetailPage() {
       toast.error(e instanceof ApiError ? e.message : 'Could not release payout')
     } finally {
       setBusy(false)
+      setConfirmAction(null)
     }
   }
   async function onClose() {
-    if (!confirm('Close this fundraiser? No more donations will be accepted.')) return
     setBusy(true)
     try {
       await close.mutateAsync()
@@ -84,6 +85,7 @@ export default function FundraiserDetailPage() {
       toast.error(e instanceof ApiError ? e.message : 'Could not close the fundraiser')
     } finally {
       setBusy(false)
+      setConfirmAction(null)
     }
   }
   async function copyShare() {
@@ -141,7 +143,7 @@ export default function FundraiserDetailPage() {
                   <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0" /> {formatGhs(f.released)} already sent to {f.payeeName ?? 'the payee'}.
                 </p>
               )}
-              <button onClick={onRelease} disabled={!canRelease || busy} className="cp-btn-primary w-full">
+              <button onClick={() => setConfirmAction('release')} disabled={!canRelease || busy} className="cp-btn-primary w-full">
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : (<><Banknote className="h-4 w-4" /> Release {formatGhs(f.releasable)} to {isIndividual ? (f.payeeName || 'the payee') : 'hospital'}</>)}
               </button>
               {!canRelease && (
@@ -158,7 +160,7 @@ export default function FundraiserDetailPage() {
                   Pays out to the MoMo number you entered ({f.payeeName || '—'}). Release any time — no review needed.
                 </p>
               )}
-              <button onClick={onClose} disabled={busy} className="cp-btn-ghost w-full">Close fundraiser</button>
+              <button onClick={() => setConfirmAction('close')} disabled={busy} className="cp-btn-ghost w-full">Close fundraiser</button>
             </div>
           )}
           {completed && (
@@ -217,6 +219,25 @@ export default function FundraiserDetailPage() {
               : 'Funds go straight to the verified payee. CirclePay never holds the money. Powered by Moolre.'}
           </p>
         </div>
+
+        <ConfirmDialog
+          open={confirmAction === 'release'}
+          title="Release funds?"
+          message={<>Send <span className="font-semibold text-foreground">{formatGhs(f.releasable)}</span> to {f.payeeName ?? 'the payee'} now? This pays out what&apos;s been raised so far.</>}
+          confirmLabel="Release"
+          busy={busy}
+          onConfirm={onRelease}
+          onCancel={() => setConfirmAction(null)}
+        />
+        <ConfirmDialog
+          open={confirmAction === 'close'}
+          title="Close fundraiser?"
+          message="No more donations will be accepted. You can still thank contributors afterwards."
+          confirmLabel="Close fundraiser"
+          busy={busy}
+          onConfirm={onClose}
+          onCancel={() => setConfirmAction(null)}
+        />
       </div>
     </AppShell>
   )

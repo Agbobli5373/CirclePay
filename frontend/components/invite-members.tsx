@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { Plus, X, UserPlus, Loader2, Copy, MessageCircle, Send, RotateCw, Trash2, CheckCircle2 } from 'lucide-react'
 import { useInvite, useFundInvites, useResendInvite, useRevokeInvite } from '@/lib/queries'
 import { ApiError, type Invite } from '@/lib/api'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 
 const fmtRaw = (d: string) => `${d.slice(0, 2)} ${d.slice(2, 5)} ${d.slice(5, 9)}`
 const dispPhone = (p: string) => {
@@ -30,6 +31,7 @@ export function InviteMembers({ fundId, fundName, remaining }: { fundId: string;
   const [phone, setPhone] = useState('')
   const [list, setList] = useState<string[]>([])
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [revokeTarget, setRevokeTarget] = useState<Invite | null>(null)
 
   const add = () => {
     if (phone.length < 9) return
@@ -69,8 +71,9 @@ export function InviteMembers({ fundId, fundName, remaining }: { fundId: string;
       setBusyId(null)
     }
   }
-  async function doRevoke(inv: Invite) {
-    if (!confirm(`Revoke the invite to ${dispPhone(inv.phone)}?`)) return
+  async function doRevoke() {
+    const inv = revokeTarget
+    if (!inv) return
     setBusyId(inv.id)
     try {
       await revoke.mutateAsync(inv.id)
@@ -79,6 +82,7 @@ export function InviteMembers({ fundId, fundName, remaining }: { fundId: string;
       toast.error(e instanceof ApiError ? e.message : 'Could not revoke')
     } finally {
       setBusyId(null)
+      setRevokeTarget(null)
     }
   }
 
@@ -155,7 +159,7 @@ export function InviteMembers({ fundId, fundName, remaining }: { fundId: string;
                         <Send className="h-3.5 w-3.5 text-primary" /> SMS
                       </a>
                       <IconBtn onClick={() => doResend(inv)} disabled={busy} icon={busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCw className="h-3.5 w-3.5" />} label="Resend" />
-                      <IconBtn onClick={() => doRevoke(inv)} disabled={busy} icon={<Trash2 className="h-3.5 w-3.5" />} label="Revoke" danger />
+                      <IconBtn onClick={() => setRevokeTarget(inv)} disabled={busy} icon={<Trash2 className="h-3.5 w-3.5" />} label="Revoke" danger />
                     </div>
                   )}
                   {inv.status === 'accepted' && (
@@ -167,6 +171,17 @@ export function InviteMembers({ fundId, fundName, remaining }: { fundId: string;
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={!!revokeTarget}
+        title="Revoke invite?"
+        message={revokeTarget ? <>Revoke the invite to {dispPhone(revokeTarget.phone)}? They&apos;ll no longer be able to join.</> : null}
+        confirmLabel="Revoke"
+        danger
+        busy={busyId === revokeTarget?.id}
+        onConfirm={doRevoke}
+        onCancel={() => setRevokeTarget(null)}
+      />
     </div>
   )
 }
