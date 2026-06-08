@@ -5,9 +5,9 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/app-shell'
-import { BadgeCheck, ShieldCheck, Copy, Loader2, AlertCircle, CheckCircle2, Banknote, Clock, ChevronLeft } from 'lucide-react'
+import { BadgeCheck, ShieldCheck, Copy, Loader2, AlertCircle, CheckCircle2, Banknote, Clock, ChevronLeft, FileText } from 'lucide-react'
 import { formatGhs } from '@circlepay/shared'
-import { useFundraiser, useMe, useVerifyPayee, useReleasePayout, useCloseFundraiser } from '@/lib/queries'
+import { useFundraiser, useMe, useVerifyPayee, useReleasePayout, useCloseFundraiser, useUploadReceipt, useVerifyReceipt } from '@/lib/queries'
 import { ApiError } from '@/lib/api'
 import { FundraiserInvites } from '@/components/fundraiser-invites'
 import { ThankContributors } from '@/components/thank-contributors'
@@ -20,6 +20,31 @@ const VERIFY: Record<string, { label: string; cls: string }> = {
   rejected: { label: 'Payee rejected', cls: 'bg-destructive/10 text-destructive' },
 }
 
+const TRANCHE_STATUS: Record<string, string> = { held: 'Reserved', released: 'Sent', settled: 'Delivered', refunded: 'Refunded' }
+
+/** Organizer pastes a link to the bill/receipt for a released tranche. */
+function AddReceiptForm({ onAdd, busy }: { onAdd: (docUrl: string) => void; busy: boolean }) {
+  const [url, setUrl] = useState('')
+  return (
+    <div className="flex gap-2">
+      <input
+        type="url"
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        placeholder="Paste a link to the bill / receipt"
+        className="flex-1 h-9 rounded-lg border border-border bg-background px-3 text-xs text-foreground"
+      />
+      <button
+        onClick={() => { onAdd(url); setUrl('') }}
+        disabled={busy || !url.trim()}
+        className="cp-btn-primary h-9 px-3 text-xs disabled:opacity-50"
+      >
+        Add receipt
+      </button>
+    </div>
+  )
+}
+
 export default function FundraiserDetailPage() {
   const id = useParams<{ id: string }>().id
   const { data: me } = useMe()
@@ -27,6 +52,8 @@ export default function FundraiserDetailPage() {
   const verify = useVerifyPayee(id)
   const release = useReleasePayout(id)
   const close = useCloseFundraiser(id)
+  const uploadReceipt = useUploadReceipt(id)
+  const verifyReceipt = useVerifyReceipt(id)
   const [busy, setBusy] = useState(false)
   const [confirmAction, setConfirmAction] = useState<null | 'release' | 'close'>(null)
 
@@ -50,7 +77,9 @@ export default function FundraiserDetailPage() {
   const isIndividual = f.payoutRoute === 'individual_cash'
   const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/f/${f.slug}` : `/f/${f.slug}`
   // Individual (personal MoMo) payouts release without ops verification; hospital routes need it.
-  const canRelease = f.isOwner && !completed && f.releasable > 0 && (isIndividual || f.verificationStatus === 'verified')
+  const activeTranches = f.tranches.filter((t) => t.status !== 'refunded')
+  const nextAmount = activeTranches.length === 0 && f.firstTrancheCap ? Math.min(f.releasable, f.firstTrancheCap) : f.releasable
+  const canRelease = f.isOwner && !completed && f.canReleaseNext
   const showOps = !!me?.isOpsAdmin && !isIndividual && f.verificationStatus !== 'verified' && !completed
 
   async function onVerify(decision: 'verified' | 'rejected') {
@@ -90,6 +119,29 @@ export default function FundraiserDetailPage() {
   }
   async function copyShare() {
     try { await navigator.clipboard.writeText(shareUrl); toast.success('Share link copied') } catch { toast.error('Could not copy') }
+  }
+  async function onUploadReceipt(trancheId: string, docUrl: string) {
+    if (!docUrl.trim()) return
+    setBusy(true)
+    try {
+      await uploadReceipt.mutateAsync({ trancheId, kind: 'receipt', docUrl: docUrl.trim() })
+      toast.success('Receipt submitted for review')
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Could not add the receipt')
+    } finally {
+      setBusy(false)
+    }
+  }
+  async function onVerifyReceipt(receiptId: string, decision: 'verified' | 'rejected') {
+    setBusy(true)
+    try {
+      await verifyReceipt.mutateAsync({ receiptId, decision })
+      toast.success(decision === 'verified' ? 'Receipt verified — next release unlocked' : 'Receipt rejected')
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Could not update the receipt')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -144,14 +196,16 @@ export default function FundraiserDetailPage() {
                 </p>
               )}
               <button onClick={() => setConfirmAction('release')} disabled={!canRelease || busy} className="cp-btn-primary w-full">
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : (<><Banknote className="h-4 w-4" /> Release {formatGhs(f.releasable)} to {isIndividual ? (f.payeeName || 'the payee') : 'hospital'}</>)}
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : (<><Banknote className="h-4 w-4" /> Release {formatGhs(nextAmount)} to {isIndividual ? (f.payeeName || 'the payee') : 'hospital'}</>)}
               </button>
               {!canRelease && (
                 <p className="text-xs text-secondary flex items-center gap-1.5">
                   <Clock className="h-3.5 w-3.5 flex-shrink-0" />
                   {f.releasable <= 0
                     ? (f.released > 0 ? 'All funds raised so far have been released.' : 'No funds raised yet — release opens once a donation comes in.')
-                    : 'Waiting for ops to verify the payee before you can release funds.'}
+                    : f.nextBlockedReason === 'receipt_required'
+                      ? 'Add the previous step’s receipt and have ops verify it to release more.'
+                      : 'Waiting for ops to verify the payee before you can release funds.'}
                 </p>
               )}
               {isIndividual && f.releasable > 0 && (
@@ -181,6 +235,62 @@ export default function FundraiserDetailPage() {
             </div>
           )}
         </div>
+
+        {/* Payout steps (tranches) + receipt gate */}
+        {(f.tranches.length > 0 || f.requiresReceipts) && (
+          <div className="cp-card p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-semibold text-foreground">Payout steps</h2>
+              {f.requiresReceipts && <span className="cp-pill">Receipt-gated</span>}
+            </div>
+            {f.requiresReceipts && (
+              <p className="text-xs text-secondary">
+                Funds move in steps. After a release, add that step&apos;s receipt — once ops verify it, the next release unlocks.
+              </p>
+            )}
+            {f.tranches.length === 0 ? (
+              <p className="text-sm text-secondary">No funds released yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {f.tranches.map((t, i) => {
+                  const rcpts = f.receipts.filter((r) => r.trancheId === t.id)
+                  const verified = rcpts.some((r) => r.kind === 'receipt' && r.status === 'verified')
+                  const pending = rcpts.some((r) => r.status === 'submitted')
+                  const needsReceipt = f.requiresReceipts && (t.status === 'released' || t.status === 'settled') && !verified
+                  return (
+                    <div key={t.id} className="rounded-xl border border-border p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-foreground">Step {i + 1} · {formatGhs(t.amount)}</span>
+                        <span className="cp-pill">{TRANCHE_STATUS[t.status] ?? t.status}</span>
+                      </div>
+                      {rcpts.map((r) => (
+                        <div key={r.id} className="flex items-center justify-between gap-2">
+                          <a
+                            href={r.docUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className={`inline-flex items-center gap-1 text-xs hover:underline truncate ${r.status === 'verified' ? 'text-primary' : 'text-secondary'}`}
+                          >
+                            <FileText className="h-3.5 w-3.5 flex-shrink-0" /> {r.kind === 'proforma' ? 'Bill' : 'Receipt'} · {r.status}
+                          </a>
+                          {me?.isOpsAdmin && r.status === 'submitted' && (
+                            <span className="flex gap-2 flex-shrink-0">
+                              <button onClick={() => onVerifyReceipt(r.id, 'verified')} disabled={busy} className="text-xs font-semibold text-primary hover:underline">Verify</button>
+                              <button onClick={() => onVerifyReceipt(r.id, 'rejected')} disabled={busy} className="text-xs font-semibold text-secondary hover:text-destructive">Reject</button>
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                      {needsReceipt && !pending && f.isOwner && (
+                        <AddReceiptForm busy={busy} onAdd={(url) => onUploadReceipt(t.id, url)} />
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Organizer: invite family & friends to contribute */}
         {f.isOwner && !completed && <FundraiserInvites fundraiserId={f.id} />}
@@ -223,7 +333,7 @@ export default function FundraiserDetailPage() {
         <ConfirmDialog
           open={confirmAction === 'release'}
           title="Release funds?"
-          message={<>Send <span className="font-semibold text-foreground">{formatGhs(f.releasable)}</span> to {f.payeeName ?? 'the payee'} now? This pays out what&apos;s been raised so far.</>}
+          message={<>Send <span className="font-semibold text-foreground">{formatGhs(nextAmount)}</span> to {f.payeeName ?? 'the payee'} now? This pays out the next step.</>}
           confirmLabel="Release"
           busy={busy}
           onConfirm={onRelease}

@@ -158,6 +158,24 @@ export function useCloseFundraiser(id: string) {
   })
 }
 
+export function useUploadReceipt(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { trancheId: string; kind?: 'proforma' | 'receipt'; docUrl: string }) =>
+      api.fundraisers.uploadReceipt(id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['fundraiser', id] }),
+  })
+}
+
+export function useVerifyReceipt(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (v: { receiptId: string; decision: 'verified' | 'rejected' }) =>
+      api.fundraisers.verifyReceipt(id, v.receiptId, v.decision),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['fundraiser', id] }),
+  })
+}
+
 export function useFundraiserInvites(id: string) {
   return useQuery({ queryKey: ['fundraiser-invites', id], queryFn: () => api.fundraisers.invites(id), enabled: !!id })
 }

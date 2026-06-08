@@ -215,12 +215,32 @@ export interface PublicFundraiser {
   status: string
   contributors: DonorView[]
 }
+export interface Tranche {
+  id: string
+  amount: number
+  status: 'held' | 'released' | 'settled' | 'refunded'
+  releasedAt: string | null
+}
+export interface Receipt {
+  id: string
+  trancheId: string | null
+  kind: 'proforma' | 'receipt'
+  status: 'submitted' | 'verified' | 'rejected'
+  docUrl: string
+  ts: string
+}
 export interface Fundraiser extends PublicFundraiser {
   id: string
   isOwner: boolean
   payeeName: string | null
   released: number
   releasable: number
+  requiresReceipts: boolean
+  firstTrancheCap: number | null
+  canReleaseNext: boolean
+  nextBlockedReason: 'receipt_required' | 'payee_unverified' | null
+  tranches: Tranche[]
+  receipts: Receipt[]
 }
 export interface MyFundraiser {
   id: string
@@ -258,6 +278,8 @@ export interface CreateMedicalPayload {
   payee: { name: string; momo?: string; network?: Network; bank?: string }
   deadline?: string
   shareable: boolean
+  requiresReceipts?: boolean
+  firstTrancheCap?: number // pesewas — cap the first release
 }
 export interface DonatePayload {
   donationId: string
@@ -370,6 +392,11 @@ export const api = {
       request<{ ok: true }>(`/fundraisers/${id}/invites/${inviteId}`, { method: 'DELETE' }),
     thank: (id: string, note?: string) =>
       request<{ sent: number }>(`/fundraisers/${id}/thank`, { method: 'POST', body: { note } }),
+    uploadReceipt: (id: string, body: { trancheId: string; kind?: 'proforma' | 'receipt'; docUrl: string }) =>
+      request<Receipt>(`/fundraisers/${id}/receipts`, { method: 'POST', body }),
+    receipts: (id: string) => request<Receipt[]>(`/fundraisers/${id}/receipts`),
+    verifyReceipt: (id: string, receiptId: string, decision: 'verified' | 'rejected', note?: string) =>
+      request<Receipt>(`/fundraisers/${id}/receipts/${receiptId}/verify`, { method: 'POST', body: { decision, note } }),
   },
   public: {
     fundraiser: (slug: string) => request<PublicFundraiser>(`/public/fundraisers/${encodeURIComponent(slug)}`),
