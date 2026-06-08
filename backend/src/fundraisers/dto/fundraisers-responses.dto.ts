@@ -51,6 +51,42 @@ export class PublicFundraiserDto {
   contributors!: ContributorDto[]
 }
 
+/** A payout tranche (escrow step). */
+export class TrancheDto {
+  @ApiProperty({ example: 'cmstrancheid' })
+  id!: string
+
+  @ApiProperty({ example: 100000, description: 'Tranche amount, pesewas.' })
+  amount!: number
+
+  @ApiProperty({ example: 'released', enum: ['held', 'released', 'settled', 'refunded'] })
+  status!: string
+
+  @ApiPropertyOptional({ example: '2026-06-08T10:00:00.000Z', nullable: true })
+  releasedAt!: Date | null
+}
+
+/** A proof-of-use document attached to a tranche. */
+export class ReceiptDto {
+  @ApiProperty({ example: 'cmsreceiptid' })
+  id!: string
+
+  @ApiPropertyOptional({ example: 'cmstrancheid', nullable: true })
+  trancheId!: string | null
+
+  @ApiProperty({ example: 'receipt', enum: ['proforma', 'receipt'] })
+  kind!: string
+
+  @ApiProperty({ example: 'submitted', enum: ['submitted', 'verified', 'rejected'] })
+  status!: string
+
+  @ApiProperty({ example: 'https://example.com/bill.jpg', description: 'Link to the bill/receipt.' })
+  docUrl!: string
+
+  @ApiProperty({ example: '2026-06-08T10:00:00.000Z' })
+  ts!: Date
+}
+
 /** In-app fundraiser detail (organizer / ops). Extends the public view with control flags. */
 export class FundraiserDto extends PublicFundraiserDto {
   @ApiProperty({ example: 'cmsfundid' })
@@ -64,6 +100,30 @@ export class FundraiserDto extends PublicFundraiserDto {
 
   @ApiProperty({ example: 'Korle Bu MoMo', description: 'Payee display name.' })
   payeeName!: string
+
+  @ApiProperty({ example: 200000, description: 'Sum of non-refunded tranche amounts, pesewas.' })
+  released!: number
+
+  @ApiProperty({ example: 120000, description: 'How much can be released now (raised − released, capped), pesewas.' })
+  releasable!: number
+
+  @ApiProperty({ example: true, description: 'Whether 2nd+ releases are gated on a verified receipt.' })
+  requiresReceipts!: boolean
+
+  @ApiPropertyOptional({ example: 100000, nullable: true, description: 'Cap on the first release, pesewas.' })
+  firstTrancheCap!: number | null
+
+  @ApiProperty({ example: false, description: 'Can the organizer release a tranche right now?' })
+  canReleaseNext!: boolean
+
+  @ApiPropertyOptional({ example: 'receipt_required', nullable: true, enum: ['receipt_required', 'payee_unverified'] })
+  nextBlockedReason!: string | null
+
+  @ApiProperty({ type: [TrancheDto] })
+  tranches!: TrancheDto[]
+
+  @ApiProperty({ type: [ReceiptDto] })
+  receipts!: ReceiptDto[]
 }
 
 /** Compact medical fundraiser card for the organizer's Funds list / dashboard. */

@@ -251,3 +251,89 @@ describe('FundraisersService.remindInvite', () => {
     await expect(svc.remindInvite('u1', 'f1', 'i1')).rejects.toMatchObject({ response: { code: 'ALREADY_CONTRIBUTED' } })
   })
 })
+
+describe('FundraisersService receipts (E7-S3)', () => {
+  it('uploadReceipt: organizer attaches a submitted receipt for a tranche', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 'r1', trancheId: 't1', kind: 'receipt', status: 'submitted', docUrl: 'https://x/y.jpg', ts: new Date() })
+    const db = {
+      fund: { findUnique: jest.fn().mockResolvedValue({ id: 'f1', createdById: 'u1', fundraiser: { slug: 's' }, createdBy: { name: 'Ama' } }) },
+      payoutTranche: { findUnique: jest.fn().mockResolvedValue({ id: 't1', fundId: 'f1' }) },
+      receipt: { create },
+    }
+    const { svc } = makeSvc(db)
+    const out = await svc.uploadReceipt('u1', 'f1', { trancheId: 't1', kind: 'receipt', docUrl: 'https://x/y.jpg' } as never)
+    expect(out).toMatchObject({ id: 'r1', status: 'submitted' })
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ fundId: 'f1', trancheId: 't1', uploadedBy: 'u1', status: 'submitted' }) }))
+  })
+
+  it('uploadReceipt: rejects a non-organizer (403)', async () => {
+    const db = { fund: { findUnique: jest.fn().mockResolvedValue({ id: 'f1', createdById: 'u1', fundraiser: { slug: 's' }, createdBy: { name: 'A' } }) } }
+    const { svc } = makeSvc(db)
+    await expect(
+      svc.uploadReceipt('intruder', 'f1', { trancheId: 't1', kind: 'receipt', docUrl: 'https://x' } as never),
+    ).rejects.toMatchObject({ response: { code: 'FORBIDDEN' } })
+  })
+
+  it('verifyReceipt: rejects a non-ops user (403)', async () => {
+    const db = { user: { findUnique: jest.fn().mockResolvedValue({ isOpsAdmin: false }) } }
+    const { svc } = makeSvc(db)
+    await expect(svc.verifyReceipt('u2', 'f1', 'r1', { decision: 'verified' } as never)).rejects.toMatchObject({ response: { code: 'FORBIDDEN' } })
+  })
+
+  it('verifyReceipt: ops flips a receipt to verified', async () => {
+    const update = jest.fn().mockResolvedValue({ id: 'r1', trancheId: 't1', kind: 'receipt', status: 'verified', docUrl: 'https://x', ts: new Date() })
+    const db = {
+      user: { findUnique: jest.fn().mockResolvedValue({ isOpsAdmin: true }) },
+      receipt: { findUnique: jest.fn().mockResolvedValue({ id: 'r1', fundId: 'f1' }), update },
+      fund: { findUnique: jest.fn().mockResolvedValue({ fundraiser: { beneficiary: 'Kofi' }, createdBy: { phone: null } }) },
+    }
+    const { svc } = makeSvc(db)
+    const out = await svc.verifyReceipt('ops', 'f1', 'r1', { decision: 'verified' } as never)
+    expect(out).toMatchObject({ status: 'verified' })
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: { status: 'verified', verifiedBy: 'ops' } }))
+  })
+})
+
+describe('FundraisersService.release — receipt gate + caps', () => {
+  function gatedDb(opts: { raised?: number; tranches?: Array<Record<string, unknown>>; receipts?: Array<Record<string, unknown>> }) {
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      fundraiserDetail: { findUnique: jest.fn().mockResolvedValue({ raised: opts.raised ?? 100000 }) },
+      payoutTranche: { findMany: jest.fn().mockResolvedValue(opts.tranches ?? []), create: jest.fn().mockResolvedValue({}) },
+      receipt: { findMany: jest.fn().mockResolvedValue(opts.receipts ?? []) },
+    }
+    return {
+      fund: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'f1',
+          createdById: 'u1',
+          fundraiser: { verificationStatus: 'unverified', raised: opts.raised ?? 100000, payoutRoute: 'individual_cash', payeeMomo: '+233240000002', payeeNetwork: 'MTN', payeeBank: null, requiresReceipts: true, firstTrancheCap: 40000, totalCap: null },
+        }),
+      },
+      $transaction: jest.fn(async (cb: (t: unknown) => unknown) => cb(tx)),
+      payoutTranche: { update: jest.fn().mockResolvedValue({}) },
+    }
+  }
+
+  it('caps the FIRST release at firstTrancheCap', async () => {
+    const { svc, moolre } = makeSvc(gatedDb({ raised: 100000, tranches: [], receipts: [] }))
+    const out = await svc.release('u1', 'f1')
+    expect(out).toMatchObject({ amount: 40000, externalref: 'mp:f1:1' }) // 40000 cap, not the full 100000
+    expect(moolre.transfer).toHaveBeenCalledWith(expect.objectContaining({ amount: '400.00' }))
+  })
+
+  it('blocks the 2nd release until the prior tranche has a verified receipt (RECEIPT_REQUIRED)', async () => {
+    const { svc, moolre } = makeSvc(gatedDb({ raised: 100000, tranches: [{ id: 't1', amount: 40000, status: 'released' }], receipts: [] }))
+    await expect(svc.release('u1', 'f1')).rejects.toMatchObject({ response: { code: 'RECEIPT_REQUIRED' } })
+    expect(moolre.transfer).not.toHaveBeenCalled()
+  })
+
+  it('allows the 2nd release once the prior tranche receipt is verified', async () => {
+    const { svc, moolre } = makeSvc(
+      gatedDb({ raised: 100000, tranches: [{ id: 't1', amount: 40000, status: 'released' }], receipts: [{ id: 'r1', trancheId: 't1', kind: 'receipt', status: 'verified' }] }),
+    )
+    const out = await svc.release('u1', 'f1')
+    expect(out).toMatchObject({ amount: 60000, externalref: 'mp:f1:2' }) // remaining delta, uncapped
+    expect(moolre.transfer).toHaveBeenCalled()
+  })
+})

@@ -28,6 +28,10 @@ export const createMedicalFundSchema = z
     }),
     deadline: z.coerce.date().optional(),
     shareable: z.boolean().default(true),
+    /** Gate 2nd+ releases on a verified receipt of the prior tranche. Defaults server-side to true for individual_cash. */
+    requiresReceipts: z.boolean().optional(),
+    /** Cap the FIRST release (pesewas) so funds move in steps. */
+    firstTrancheCap: z.number().int().positive().optional(),
   })
   .refine((d) => d.payoutRoute !== 'hospital_momo' || !!d.payee.momo, {
     message: 'A payee MoMo number is required for the hospital MoMo route',
@@ -74,8 +78,23 @@ export const thankContributorsSchema = z.object({
   note: z.string().trim().max(160, 'Keep it short for SMS').optional(),
 })
 
+/** Organizer attaches a bill (proforma) or stamped receipt for a released tranche — by URL (no file upload). */
+export const uploadReceiptSchema = z.object({
+  trancheId: z.string().min(1),
+  kind: z.enum(['proforma', 'receipt']).default('receipt'),
+  docUrl: z.string().url('Enter a valid link to the document').max(2000),
+})
+
+/** Ops adjudication of an uploaded receipt — verifying one unlocks the next tranche release. */
+export const verifyReceiptSchema = z.object({
+  decision: z.enum(['verified', 'rejected']),
+  note: z.string().trim().max(300).optional(),
+})
+
 export type CreateMedicalFundInput = z.infer<typeof createMedicalFundSchema>
 export type DonateInput = z.infer<typeof donateSchema>
 export type VerifyPayeeInput = z.infer<typeof verifyPayeeSchema>
 export type InviteContributorsInput = z.infer<typeof inviteContributorsSchema>
 export type ThankContributorsInput = z.infer<typeof thankContributorsSchema>
+export type UploadReceiptInput = z.infer<typeof uploadReceiptSchema>
+export type VerifyReceiptInput = z.infer<typeof verifyReceiptSchema>

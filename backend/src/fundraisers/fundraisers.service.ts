@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 import { ConfigService } from '@nestjs/config'
-import { payoutPostings } from '@circlepay/shared'
+import { payoutPostings, canReleaseNextTranche, type PayoutTranche, type Receipt } from '@circlepay/shared'
 import { PrismaService } from '../prisma/prisma.service'
 import { MoolreService } from '../moolre/moolre.service'
 import { MoolreError, TransferChannel } from '../moolre/moolre.client'
@@ -25,6 +25,8 @@ import type {
   VerifyPayeeDto,
   InviteContributorsDto,
   ThankContributorsDto,
+  UploadReceiptDto,
+  VerifyReceiptDto,
 } from './dto/fundraisers.dto'
 
 function slugify(s: string): string {
@@ -89,6 +91,9 @@ export class FundraisersService implements OnModuleInit {
                 payeeBank: dto.payee.bank,
                 payeeNetwork: dto.payee.network,
                 verificationStatus: 'unverified',
+                // Cash-to-a-person is the high-trust-risk route → gate releases on receipts by default.
+                requiresReceipts: dto.requiresReceipts ?? dto.payoutRoute === 'individual_cash',
+                firstTrancheCap: dto.firstTrancheCap ?? null,
               },
             },
           },
@@ -213,9 +218,27 @@ export class FundraisersService implements OnModuleInit {
     const reserved = await this.db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM "Fund" WHERE id = ${fundId} FOR UPDATE`
       const fresh = await tx.fundraiserDetail.findUnique({ where: { fundId }, select: { raised: true } })
-      const tranches = await tx.payoutTranche.findMany({ where: { fundId }, select: { amount: true, status: true } })
-      const committed = tranches.filter((t) => t.status !== 'refunded').reduce((s, t) => s + t.amount, 0)
-      const available = (fresh?.raised ?? 0) - committed
+      const tranches = await tx.payoutTranche.findMany({ where: { fundId }, select: { id: true, amount: true, status: true } })
+
+      // Receipt gate (escrow): the 2nd+ release requires a verified receipt for the prior tranche.
+      if (fr.requiresReceipts) {
+        const receipts = await tx.receipt.findMany({ where: { fundId }, select: { id: true, trancheId: true, kind: true, status: true } })
+        if (!canReleaseNextTranche(tranches as unknown as PayoutTranche[], receipts as unknown as Receipt[])) {
+          throw new ConflictException({
+            code: 'RECEIPT_REQUIRED',
+            message: 'Upload the previous tranche’s receipt and have ops verify it before releasing more',
+          })
+        }
+      }
+
+      const active = tranches.filter((t) => t.status !== 'refunded')
+      const committed = active.reduce((s, t) => s + t.amount, 0)
+      const ceiling = fr.totalCap ?? (fresh?.raised ?? 0)
+      let available = Math.min(fresh?.raised ?? 0, ceiling) - committed
+      // Cap the FIRST release so funds move in steps; later releases pay the remaining delta.
+      if (active.length === 0 && fr.firstTrancheCap) {
+        available = Math.min(available, fr.firstTrancheCap)
+      }
       if (available <= 0) {
         throw new ConflictException({ code: 'NOTHING_TO_RELEASE', message: 'All raised funds have already been released' })
       }
@@ -258,6 +281,69 @@ export class FundraisersService implements OnModuleInit {
     await this.assertOrganizer(fundId, userId)
     await this.db.fund.update({ where: { id: fundId }, data: { status: 'completed' } })
     return { ok: true as const }
+  }
+
+  // ---------- E7-S3: receipt-gated tranches ----------
+
+  /** Organizer attaches a bill/receipt (by URL) for a released tranche. */
+  async uploadReceipt(userId: string, fundId: string, dto: UploadReceiptDto) {
+    await this.assertOrganizer(fundId, userId)
+    const tranche = await this.db.payoutTranche.findUnique({ where: { id: dto.trancheId } })
+    if (!tranche || tranche.fundId !== fundId) {
+      throw new NotFoundException({ code: 'TRANCHE_NOT_FOUND', message: 'Tranche not found on this fundraiser' })
+    }
+    const r = await this.db.receipt.create({
+      data: { fundId, trancheId: dto.trancheId, kind: dto.kind, docUrl: dto.docUrl, uploadedBy: userId, status: 'submitted' },
+    })
+    return this.toReceipt(r)
+  }
+
+  /** Organizer OR ops: list the fundraiser's receipts. */
+  async listReceipts(userId: string, fundId: string) {
+    const fund = await this.db.fund.findUnique({
+      where: { id: fundId },
+      select: { createdById: true, fundraiser: { select: { fundId: true } } },
+    })
+    if (!fund?.fundraiser) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Fundraiser not found' })
+    if (fund.createdById !== userId) await this.assertOpsAdmin(userId)
+    const receipts = await this.db.receipt.findMany({ where: { fundId }, orderBy: { ts: 'desc' } })
+    return receipts.map((r) => this.toReceipt(r))
+  }
+
+  /** Ops: verify or reject a receipt. Verifying one unlocks the next tranche release. */
+  async verifyReceipt(userId: string, fundId: string, receiptId: string, dto: VerifyReceiptDto) {
+    await this.assertOpsAdmin(userId)
+    const receipt = await this.db.receipt.findUnique({ where: { id: receiptId } })
+    if (!receipt || receipt.fundId !== fundId) {
+      throw new NotFoundException({ code: 'RECEIPT_NOT_FOUND', message: 'Receipt not found' })
+    }
+    const updated = await this.db.receipt.update({
+      where: { id: receiptId },
+      data: { status: dto.decision, verifiedBy: userId },
+    })
+    if (dto.decision === 'verified') {
+      const fund = await this.db.fund.findUnique({
+        where: { id: fundId },
+        include: { fundraiser: true, createdBy: { select: { phone: true } } },
+      })
+      const phone = fund?.createdBy?.phone
+      if (phone && fund?.fundraiser) {
+        try {
+          await this.notifications.sendSms(
+            phone,
+            `CirclePay: a receipt for "${fund.fundraiser.beneficiary}" was verified — you can release the next tranche.`,
+            `receipt-verified:${receiptId}`,
+          )
+        } catch (err) {
+          this.logger.warn(`Receipt-verified SMS failed for ${receiptId}: ${(err as Error).message}`)
+        }
+      }
+    }
+    return this.toReceipt(updated)
+  }
+
+  private toReceipt(r: { id: string; trancheId: string | null; kind: string; status: string; docUrl: string; ts: Date }) {
+    return { id: r.id, trancheId: r.trancheId, kind: r.kind, status: r.status, docUrl: r.docUrl, ts: r.ts }
   }
 
   // ---------- EM — invite family/friends to contribute, remind, thank ----------
@@ -431,7 +517,18 @@ export class FundraisersService implements OnModuleInit {
     const fund = await this.db.fund.findUnique({
       where: { id: fundId },
       include: {
-        fundraiser: { include: { tranches: { select: { amount: true, status: true } } } },
+        fundraiser: {
+          include: {
+            tranches: {
+              select: { id: true, amount: true, status: true, externalref: true, releasedAt: true },
+              orderBy: { createdAt: 'asc' },
+            },
+            receipts: {
+              select: { id: true, trancheId: true, kind: true, status: true, docUrl: true, ts: true, verifiedBy: true },
+              orderBy: { ts: 'desc' },
+            },
+          },
+        },
         contributors: { where: { status: 'settled' }, orderBy: { ts: 'desc' }, take: 50 },
       },
     })
@@ -580,11 +677,42 @@ export class FundraisersService implements OnModuleInit {
 
   private toDetail(
     fund: { id: string; name: string; status: string; createdById: string },
-    fr: { slug: string; beneficiary: string; hospital: string | null; story: string | null; goal: number; raised: number; deadline: Date | null; payoutRoute: string; verificationStatus: string; payeeName: string | null; tranches?: Array<{ amount: number; status: string }> },
+    fr: {
+      slug: string
+      beneficiary: string
+      hospital: string | null
+      story: string | null
+      goal: number
+      raised: number
+      deadline: Date | null
+      payoutRoute: string
+      verificationStatus: string
+      payeeName: string | null
+      requiresReceipts?: boolean
+      firstTrancheCap?: number | null
+      totalCap?: number | null
+      tranches?: Array<{ id: string; amount: number; status: string; externalref?: string | null; releasedAt?: Date | null }>
+      receipts?: Array<{ id: string; trancheId: string | null; kind: string; status: string; docUrl: string; ts: Date }>
+    },
     userId: string,
     contributors: Array<{ displayName: string; amount: number; ts: Date }>,
   ) {
-    const released = (fr.tranches ?? []).filter((t) => t.status !== 'refunded').reduce((s, t) => s + t.amount, 0)
+    const tranches = fr.tranches ?? []
+    const receipts = fr.receipts ?? []
+    const released = tranches.filter((t) => t.status !== 'refunded').reduce((s, t) => s + t.amount, 0)
+    const ceiling = fr.totalCap ?? fr.raised
+    const releasable = Math.max(0, Math.min(fr.raised, ceiling) - released)
+    const requiresReceipts = !!fr.requiresReceipts
+    const needsVerification = fr.payoutRoute === 'hospital_momo' || fr.payoutRoute === 'hospital_bank'
+
+    let nextBlockedReason: 'payee_unverified' | 'receipt_required' | null = null
+    if (needsVerification && fr.verificationStatus !== 'verified') {
+      nextBlockedReason = 'payee_unverified'
+    } else if (requiresReceipts && !canReleaseNextTranche(tranches as unknown as PayoutTranche[], receipts as unknown as Receipt[])) {
+      nextBlockedReason = 'receipt_required'
+    }
+    const canReleaseNext = releasable > 0 && nextBlockedReason === null
+
     return {
       ...this.toPublic({ ...fr, fund: { name: fund.name, status: fund.status } }, contributors),
       id: fund.id,
@@ -592,7 +720,13 @@ export class FundraisersService implements OnModuleInit {
       isOwner: fund.createdById === userId,
       payeeName: fr.payeeName,
       released,
-      releasable: Math.max(0, fr.raised - released),
+      releasable,
+      requiresReceipts,
+      firstTrancheCap: fr.firstTrancheCap ?? null,
+      canReleaseNext,
+      nextBlockedReason,
+      tranches: tranches.map((t) => ({ id: t.id, amount: t.amount, status: t.status, releasedAt: t.releasedAt ?? null })),
+      receipts: receipts.map((r) => this.toReceipt(r)),
     }
   }
 }

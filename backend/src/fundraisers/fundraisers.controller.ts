@@ -13,7 +13,14 @@ import { JwtAuthGuard } from '../common/auth/jwt-auth.guard'
 import { CurrentUser } from '../common/auth/current-user.decorator'
 import type { AuthUser } from '../common/auth/auth-user'
 import { FundraisersService } from './fundraisers.service'
-import { CreateMedicalFundDto, VerifyPayeeDto, InviteContributorsDto, ThankContributorsDto } from './dto/fundraisers.dto'
+import {
+  CreateMedicalFundDto,
+  VerifyPayeeDto,
+  InviteContributorsDto,
+  ThankContributorsDto,
+  UploadReceiptDto,
+  VerifyReceiptDto,
+} from './dto/fundraisers.dto'
 import { FundraiserDto, MyFundraiserDto } from './dto/fundraisers-responses.dto'
 
 @ApiTags('fundraisers')
@@ -68,6 +75,33 @@ export class FundraisersController {
   @ApiForbiddenResponse({ description: 'FORBIDDEN — organizer only' })
   close(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.fundraisers.closeFundraiser(user.id, id)
+  }
+
+  @Post(':id/receipts')
+  @ApiOperation({ summary: 'Attach a bill/receipt (by URL) for a released tranche — organizer only' })
+  @ApiCreatedResponse({ description: 'ReceiptDto' })
+  uploadReceipt(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: UploadReceiptDto) {
+    return this.fundraisers.uploadReceipt(user.id, id, dto)
+  }
+
+  @Get(':id/receipts')
+  @ApiOperation({ summary: 'List receipts for a fundraiser — organizer or ops' })
+  @ApiOkResponse({ description: 'ReceiptDto[]' })
+  receipts(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.fundraisers.listReceipts(user.id, id)
+  }
+
+  @Post(':id/receipts/:receiptId/verify')
+  @ApiOperation({ summary: 'Ops: verify/reject a receipt — verifying unlocks the next tranche release' })
+  @ApiOkResponse({ description: 'ReceiptDto' })
+  @ApiForbiddenResponse({ description: 'FORBIDDEN — ops admin only' })
+  verifyReceipt(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('receiptId') receiptId: string,
+    @Body() dto: VerifyReceiptDto,
+  ) {
+    return this.fundraisers.verifyReceipt(user.id, id, receiptId, dto)
   }
 
   @Post(':id/invites')
