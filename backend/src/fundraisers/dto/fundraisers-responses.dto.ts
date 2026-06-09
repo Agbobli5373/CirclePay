@@ -47,6 +47,9 @@ export class PublicFundraiserDto {
   @ApiProperty({ example: 'verified', enum: ['unverified', 'pending', 'verified', 'rejected'] })
   verificationStatus!: string
 
+  @ApiProperty({ example: 200000, description: 'Released to the payee so far (non-refunded tranches), pesewas.' })
+  released!: number
+
   @ApiProperty({ type: [ContributorDto] })
   contributors!: ContributorDto[]
 }
@@ -100,9 +103,6 @@ export class FundraiserDto extends PublicFundraiserDto {
 
   @ApiProperty({ example: 'Korle Bu MoMo', description: 'Payee display name.' })
   payeeName!: string
-
-  @ApiProperty({ example: 200000, description: 'Sum of non-refunded tranche amounts, pesewas.' })
-  released!: number
 
   @ApiProperty({ example: 120000, description: 'How much can be released now (raised − released, capped), pesewas.' })
   releasable!: number

@@ -93,6 +93,11 @@ export default function PublicFundraiserPage() {
               <div className="bg-primary h-3 rounded-full transition-all" style={{ width: `${f.progressPercent}%` }} />
             </div>
             <p className="text-sm text-secondary">{f.contributors.length} contributor{f.contributors.length === 1 ? '' : 's'}</p>
+            {f.released > 0 && (
+              <p className="text-xs text-primary flex items-center gap-1.5">
+                <ShieldCheck className="h-3.5 w-3.5 flex-shrink-0" /> {formatGhs(f.released)} released to the payee so far, in tracked steps.
+              </p>
+            )}
 
             {closed ? (
               <div className="rounded-xl bg-primary/5 p-4 text-center">

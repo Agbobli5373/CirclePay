@@ -115,6 +115,7 @@ export class FundraisersService implements OnModuleInit {
       where: { slug },
       include: {
         fund: { include: { contributors: { where: { status: 'settled' }, orderBy: { ts: 'desc' }, take: 50 } } },
+        tranches: { select: { amount: true, status: true } },
       },
     })
     if (!fr) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Fundraiser not found' })
@@ -655,9 +656,10 @@ export class FundraisersService implements OnModuleInit {
   }
 
   private toPublic(
-    fr: { slug: string; beneficiary: string; hospital: string | null; story: string | null; goal: number; raised: number; deadline: Date | null; payoutRoute: string; verificationStatus: string; fund: { name: string; status: string } },
+    fr: { slug: string; beneficiary: string; hospital: string | null; story: string | null; goal: number; raised: number; deadline: Date | null; payoutRoute: string; verificationStatus: string; fund: { name: string; status: string }; tranches?: Array<{ amount: number; status: string }> },
     contributors: Array<{ displayName: string; amount: number; ts: Date }>,
   ) {
+    const released = (fr.tranches ?? []).filter((t) => t.status !== 'refunded').reduce((s, t) => s + t.amount, 0)
     return {
       slug: fr.slug,
       name: fr.fund.name,
@@ -671,6 +673,7 @@ export class FundraisersService implements OnModuleInit {
       payoutRoute: fr.payoutRoute,
       verificationStatus: fr.verificationStatus,
       status: fr.fund.status,
+      released,
       contributors: contributors.map((c) => ({ displayName: c.displayName, amount: c.amount, ts: c.ts })),
     }
   }

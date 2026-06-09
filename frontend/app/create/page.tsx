@@ -45,6 +45,7 @@ export default function CreateFundPage() {
   const [payeeMomo, setPayeeMomo] = useState('')
   const [payeeNetwork, setPayeeNetwork] = useState<Network>('MTN')
   const [payeeBank, setPayeeBank] = useState('')
+  const [firstCap, setFirstCap] = useState('')
 
   const [submitted, setSubmitted] = useState(false)
   const [createdFundId, setCreatedFundId] = useState<string | null>(null)
@@ -83,6 +84,8 @@ export default function CreateFundPage() {
           },
           deadline: deadline ? new Date(`${deadline}T00:00:00Z`).toISOString() : undefined,
           shareable,
+          firstTrancheCap:
+            payoutRoute === 'individual_cash' && Number(firstCap) > 0 ? toPesewas(Number(firstCap)) : undefined,
         })
         setCreatedFundId(res.id)
         setCreatedSlug(res.slug)
@@ -601,10 +604,28 @@ export default function CreateFundPage() {
                 <p className="text-xs text-secondary mt-1.5 flex items-start gap-1.5">
                   <BadgeCheck className="h-3.5 w-3.5 text-primary flex-shrink-0 mt-0.5" />
                   {payoutRoute === 'individual_cash'
-                    ? 'Goes to the MoMo number you enter — you release it yourself, any time. No review needed.'
+                    ? 'Goes to the MoMo number you enter. Funds release in steps — after the first, add a receipt (a bill/receipt link) and have it verified to release more.'
                     : 'Ops verifies the payee before any payout. CirclePay never holds the money.'}
                 </p>
               </Field>
+
+              {payoutRoute === 'individual_cash' && (
+                <Field label="Cap the first release (optional)">
+                  <div className="flex items-center h-11 rounded-lg border border-border bg-card px-3 focus-within:border-primary">
+                    <span className="text-sm font-medium text-foreground border-r border-border pr-2 mr-2">GHS</span>
+                    <input
+                      inputMode="numeric"
+                      value={firstCap}
+                      onChange={(e) => setFirstCap(e.target.value.replace(/\D/g, '').slice(0, 9))}
+                      placeholder="e.g. 300"
+                      className="flex-1 min-w-0 bg-transparent text-base text-foreground placeholder:text-secondary focus:outline-none"
+                    />
+                  </div>
+                  <p className="text-xs text-secondary mt-1.5">
+                    Limits the first payout so funds move in steps. Leave blank to allow releasing the full balance.
+                  </p>
+                </Field>
+              )}
 
               <Field label="Payee name">
                 <input

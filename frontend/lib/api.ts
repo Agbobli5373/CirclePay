@@ -213,6 +213,7 @@ export interface PublicFundraiser {
   payoutRoute: 'hospital_momo' | 'hospital_bank' | 'individual_cash'
   verificationStatus: 'unverified' | 'pending' | 'verified' | 'rejected'
   status: string
+  released: number
   contributors: DonorView[]
 }
 export interface Tranche {

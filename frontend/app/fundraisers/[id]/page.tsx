@@ -211,7 +211,9 @@ export default function FundraiserDetailPage() {
               {isIndividual && f.releasable > 0 && (
                 <p className="text-xs text-secondary flex items-start gap-1.5">
                   <ShieldCheck className="h-3.5 w-3.5 text-primary flex-shrink-0 mt-0.5" />
-                  Pays out to the MoMo number you entered ({f.payeeName || '—'}). Release any time — no review needed.
+                  {f.requiresReceipts
+                    ? `Pays out to the MoMo you entered (${f.payeeName || '—'}), in steps — add a verified receipt to unlock each next release.`
+                    : `Pays out to the MoMo you entered (${f.payeeName || '—'}). Release any time — no review needed.`}
                 </p>
               )}
               <button onClick={() => setConfirmAction('close')} disabled={busy} className="cp-btn-ghost w-full">Close fundraiser</button>
