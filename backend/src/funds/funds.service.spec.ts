@@ -375,13 +375,13 @@ describe('FundsService.detail', () => {
     expect(out.payoutOrder).toEqual(['safe', 'mid', 'risky'])
   })
 
-  it('shows other members’ MoMo full to the organizer, masked to everyone else', async () => {
+  it('shows every member’s full MoMo number to fellow members of the circle', async () => {
     const f = fund({ createdById: 'a', members: [{ userId: 'a' }, { userId: 'b' }] }) // a → …100, b → …101
     const db = { fund: { findUnique: jest.fn().mockResolvedValue(f) }, payout: { findUnique: jest.fn().mockResolvedValue(null) }, invite: { count: jest.fn().mockResolvedValue(0) } }
     const asOrganizer = await makeSvc(db).detail('a', 'f1')
     expect(asOrganizer.members.find((m) => m.userId === 'b')!.phone).toBe('+233240000101')
     const asMember = await makeSvc(db).detail('b', 'f1')
-    expect(asMember.members.find((m) => m.userId === 'a')!.phone).toBe('••• 100')
+    expect(asMember.members.find((m) => m.userId === 'a')!.phone).toBe('+233240000100')
   })
 
   it('rejects a non-member with 403 FORBIDDEN', async () => {

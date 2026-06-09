@@ -67,11 +67,6 @@ function cycleIntervalMs(frequency: string): number {
   return (frequency === 'weekly' ? 7 : 30) * 24 * 60 * 60 * 1000
 }
 
-/** Mask a member's MoMo number for non-organizers — last 3 digits only (PII-safe disambiguation). */
-function maskPhone(phone?: string | null): string {
-  return phone ? `••• ${phone.slice(-3)}` : ''
-}
-
 @Injectable()
 export class FundsService {
   private readonly logger = new Logger(FundsService.name)
@@ -515,9 +510,6 @@ export class FundsService {
 
     const order = this.computePayoutOrder(fund.susu, fund.members)
     const position = new Map(order.map((uid, i) => [uid, i + 1]))
-    // The organizer (who invited everyone) sees full MoMo numbers; other members see a masked
-    // last-3 so identical names can be told apart without broadcasting everyone's contact.
-    const isOrganizer = fund.createdById === userId
     const members: MemberDto[] = fund.members.map((m) => ({
       userId: m.userId,
       name: m.user.name,
@@ -527,7 +519,9 @@ export class FundsService {
       depositPaid: m.depositPaid,
       trustStanding: m.user.trustScore?.standing ?? 'new_',
       payoutPosition: position.get(m.userId) ?? 0,
-      phone: isOrganizer ? m.user.phone : maskPhone(m.user.phone),
+      // A Susu is a trusted circle — members can see each other's full MoMo number. detail() is
+      // members-only (non-members get 403), so numbers never leak outside the circle.
+      phone: m.user.phone,
     }))
 
     // Current-cycle payout state (for the live UI).

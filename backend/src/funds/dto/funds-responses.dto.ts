@@ -69,7 +69,7 @@ export class MemberDto {
   @ApiProperty({ example: 1, description: 'Position in the payout order (1-based).' })
   payoutPosition!: number
 
-  @ApiProperty({ example: '••• 872', description: "Member's MoMo number — full for the organizer, masked (last 3) for other members." })
+  @ApiProperty({ example: '+233241234567', description: "Member's full MoMo number — visible to fellow members of the circle (detail is members-only)." })
   phone!: string
 }
 

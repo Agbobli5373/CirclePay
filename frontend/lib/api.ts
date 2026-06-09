@@ -106,7 +106,7 @@ export interface MemberView {
   depositPaid: boolean
   trustStanding: string
   payoutPosition: number
-  phone: string // full for the organizer, masked (last 3) for other members
+  phone: string // full MoMo number — visible to fellow members of the circle
 }
 
 export interface FundDetail extends FundSummary {
