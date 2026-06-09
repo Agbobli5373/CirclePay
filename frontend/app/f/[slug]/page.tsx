@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { Logo } from '@/components/logo'
 import { BadgeCheck, ShieldCheck, MessageCircle, Copy, Loader2, AlertCircle, CheckCircle2, Heart } from 'lucide-react'
-import { formatGhs, toPesewas } from '@circlepay/shared'
+import { formatGhs, toPesewas, toLocal9 } from '@circlepay/shared'
 import { usePublicFundraiser } from '@/lib/queries'
 import { OtpInput } from '@/components/otp-input'
 import { api, ApiError, type Network, type DonateState } from '@/lib/api'
@@ -267,7 +267,7 @@ function DonatePanel({ slug, onClose, onSettled }: { slug: string; onClose: () =
         <label className="text-sm font-medium text-foreground">Your MoMo number</label>
         <div className="flex items-center h-11 rounded-lg border border-border bg-card px-3 focus-within:border-primary">
           <span className="text-sm font-medium text-foreground border-r border-border pr-2 mr-2 whitespace-nowrap">🇬🇭 +233</span>
-          <input inputMode="numeric" value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 9))} placeholder="XX XXX XXXX" className="flex-1 min-w-0 bg-transparent text-base text-foreground placeholder:text-secondary focus:outline-none" />
+          <input inputMode="numeric" value={phone} onChange={(e) => setPhone(toLocal9(e.target.value))} placeholder="XX XXX XXXX" className="flex-1 min-w-0 bg-transparent text-base text-foreground placeholder:text-secondary focus:outline-none" />
         </div>
         <div className="flex gap-2 pt-1">
           {NETWORKS.map((n) => (

@@ -6,6 +6,7 @@ import { Plus, X, UserPlus, Loader2, Copy, MessageCircle, Send, RotateCw, Trash2
 import { useInvite, useFundInvites, useResendInvite, useRevokeInvite } from '@/lib/queries'
 import { ApiError, type Invite } from '@/lib/api'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { toLocal9 } from '@circlepay/shared'
 
 const fmtRaw = (d: string) => `${d.slice(0, 2)} ${d.slice(2, 5)} ${d.slice(5, 9)}`
 const dispPhone = (p: string) => {
@@ -96,7 +97,7 @@ export function InviteMembers({ fundId, fundName, remaining }: { fundId: string;
             <input
               inputMode="numeric"
               value={phone}
-              onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 9))}
+              onChange={(e) => setPhone(toLocal9(e.target.value))}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add() } }}
               placeholder="XX XXX XXXX"
               className="flex-1 min-w-0 bg-transparent text-base text-foreground placeholder:text-secondary focus:outline-none"

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { Plus, Loader2, Bell, X, Check } from 'lucide-react'
+import { toLocal9 } from '@circlepay/shared'
 import {
   useFundraiserInvites,
   useInviteContributors,
@@ -58,7 +59,7 @@ export function FundraiserInvites({ fundraiserId }: { fundraiserId: string }) {
           <input
             inputMode="numeric"
             value={phone}
-            onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 9))}
+            onChange={(e) => setPhone(toLocal9(e.target.value))}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 e.preventDefault()

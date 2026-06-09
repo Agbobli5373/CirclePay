@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/app-shell'
 import { Users, Heart, Sparkles, CheckCircle2, BadgeCheck, Share2, UserPlus, ArrowRight, ArrowLeft, Plus, X, Copy, Check, MessageCircle, Loader2 } from 'lucide-react'
-import { toPesewas } from '@circlepay/shared'
+import { toPesewas, toLocal9 } from '@circlepay/shared'
 import { useCreateFund, useInvite, useCreateMedical } from '@/lib/queries'
 import { ApiError, type Network } from '@/lib/api'
 
@@ -213,7 +213,7 @@ export default function CreateFundPage() {
                       <input
                         inputMode="numeric"
                         value={invitePhone}
-                        onChange={(e) => setInvitePhone(e.target.value.replace(/\D/g, '').slice(0, 9))}
+                        onChange={(e) => setInvitePhone(toLocal9(e.target.value))}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault()
@@ -652,7 +652,7 @@ export default function CreateFundPage() {
                     <input
                       inputMode="numeric"
                       value={payeeMomo}
-                      onChange={(e) => setPayeeMomo(e.target.value.replace(/\D/g, '').slice(0, 9))}
+                      onChange={(e) => setPayeeMomo(toLocal9(e.target.value))}
                       placeholder="XX XXX XXXX"
                       className="flex-1 min-w-0 bg-transparent text-base text-foreground placeholder:text-secondary focus:outline-none"
                     />

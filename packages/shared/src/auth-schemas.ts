@@ -5,10 +5,36 @@ import { z } from 'zod'
  * Next.js frontend (form validation), so request shapes never drift.
  */
 
-// Ghana phone: +233 followed by 9 digits (local form 0XXXXXXXXX is normalised client-side).
-export const phoneSchema = z
-  .string()
-  .regex(/^\+233\d{9}$/, 'Enter a valid Ghana number (+233XXXXXXXXX)')
+/**
+ * Normalize any common Ghana phone format to canonical E.164 `+233XXXXXXXXX`, or null if it
+ * can't be made valid. Accepts the way people actually type it: local `0XXXXXXXXX` (drops the
+ * leading 0), bare 9-digit `XXXXXXXXX`, `233…`, `+233…`; ignores spaces / dashes / brackets.
+ */
+export function normalizeGhPhone(raw: string): string | null {
+  let d = (raw ?? '').replace(/\D/g, '')
+  if (d.length > 10 && d.startsWith('233')) d = d.slice(3) // strip the country code
+  if (d.length === 10 && d.startsWith('0')) d = d.slice(1) // strip the local trunk 0
+  return /^\d{9}$/.test(d) ? `+233${d}` : null
+}
+
+/**
+ * Reduce a typed/pasted number to its up-to-9 subscriber digits, for the `+233`-prefixed input
+ * fields — strips a pasted country code and the local trunk 0 as the user types (so habitually
+ * typing `024…` just works). Ghana subscriber numbers never start with 0, so this is always safe.
+ */
+export function toLocal9(raw: string): string {
+  let d = (raw ?? '').replace(/\D/g, '')
+  if (d.length > 9 && d.startsWith('233')) d = d.slice(3)
+  if (d.startsWith('0')) d = d.slice(1)
+  return d.slice(0, 9)
+}
+
+// Ghana phone: stored as +233 followed by 9 digits. We accept the local form people actually
+// type (e.g. "024 123 4567") and normalize it before validating.
+export const phoneSchema = z.preprocess(
+  (v) => (typeof v === 'string' ? (normalizeGhPhone(v) ?? v.trim()) : v),
+  z.string().regex(/^\+233\d{9}$/, 'Enter a valid Ghana number (e.g. 024 123 4567)'),
+)
 
 export const networkSchema = z.enum(['MTN', 'Telecel', 'AirtelTigo'])
 export const languageSchema = z.enum(['en', 'tw', 'ga'])

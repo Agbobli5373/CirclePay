@@ -8,6 +8,7 @@ import { Logo } from '@/components/logo'
 import { OtpInput } from '@/components/otp-input'
 import { PinInput } from '@/components/pin-input'
 import { api, ApiError, type Network as ApiNetwork } from '@/lib/api'
+import { toLocal9 } from '@circlepay/shared'
 
 type Mode = 'login' | 'register'
 type Step = 'phone' | 'pin' | 'otp' | 'setpin'
@@ -261,7 +262,7 @@ export default function OnboardingPage() {
                       inputMode="numeric"
                       autoComplete="tel-national"
                       value={formatPhone(phone)}
-                      onChange={(e) => setPhone(e.target.value)}
+                      onChange={(e) => setPhone(toLocal9(e.target.value))}
                       placeholder="XX XXX XXXX"
                       className="flex-1 bg-transparent text-base text-foreground placeholder-secondary focus:outline-none tracking-wide"
                     />
