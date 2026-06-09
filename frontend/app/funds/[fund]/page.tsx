@@ -46,6 +46,7 @@ export default function SusuFundPage() {
     if (me && userId === me.id) return 'You'
     return fund.members.find((m) => m.userId === userId)?.name || 'Member'
   }
+  const phoneFor = (userId: string) => fund.members.find((m) => m.userId === userId)?.phone ?? null
 
   const myMember = me ? fund.members.find((m) => m.userId === me.id) : undefined
   const isAdmin = myMember?.role === 'admin'
@@ -213,6 +214,7 @@ export default function SusuFundPage() {
                     <p className="text-sm font-medium text-foreground truncate">
                       {me && m.userId === me.id ? 'You' : m.name || 'Member'}
                       {m.role === 'admin' && <span className="ml-2 cp-pill">Admin</span>}
+                      {me && m.userId !== me.id && m.phone && <span className="ml-2 text-xs font-normal text-secondary">· {m.phone}</span>}
                     </p>
                     {fund.requiresDeposit && (
                       <span className={`ml-auto shrink-0 text-xs font-medium px-2 py-0.5 rounded-full ${m.depositPaid ? 'bg-primary/10 text-primary' : 'bg-amber-500/15 text-amber-600'}`}>
@@ -315,6 +317,7 @@ export default function SusuFundPage() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-foreground truncate">
                           {me && m.userId === me.id ? 'You' : m.name || 'Member'}
+                          {m.payoutPosition > 0 && <span className="ml-2 text-xs font-normal text-secondary">#{m.payoutPosition}</span>}
                           {m.role === 'admin' && <span className="ml-2 cp-pill">Admin</span>}
                           {m.fundStatus === 'grace' && (
                             <span className="ml-2 rounded-full bg-yellow-500/15 text-yellow-600 text-xs font-semibold px-2 py-0.5">Grace</span>
@@ -323,7 +326,10 @@ export default function SusuFundPage() {
                             <span className="ml-2 rounded-full bg-destructive/15 text-destructive text-xs font-semibold px-2 py-0.5">Defaulted · locked</span>
                           )}
                         </p>
-                        <p className="text-xs text-secondary capitalize">{m.status}</p>
+                        <p className="text-xs text-secondary">
+                          {me && m.userId !== me.id && m.phone ? `${m.phone} · ` : ''}
+                          <span className="capitalize">{m.status}</span>
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -339,6 +345,7 @@ export default function SusuFundPage() {
                   const cycle = i + 1
                   const status = cycle < fund.currentCycle ? 'completed' : cycle === fund.currentCycle ? 'current' : 'upcoming'
                   const isMe = me && userId === me.id
+                  const ph = isMe ? null : phoneFor(userId)
                   return (
                     <div key={userId} className={`flex items-center gap-4 rounded-lg border p-4 ${status === 'current' ? 'border-primary bg-primary/5' : 'border-border bg-card'}`}>
                       <div
@@ -351,7 +358,7 @@ export default function SusuFundPage() {
                         {cycle}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground">{isMe ? 'You' : nameFor(userId)}</p>
+                        <p className="text-sm font-medium text-foreground">{isMe ? 'You' : nameFor(userId)}{ph ? ` · ${ph}` : ''}</p>
                         <p className="text-xs text-secondary">{formatGhs(fund.potPesewas)}</p>
                       </div>
                       <div className="flex-shrink-0 flex items-center gap-2">

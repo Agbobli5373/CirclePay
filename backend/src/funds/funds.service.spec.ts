@@ -17,6 +17,7 @@ function fund(opts: {
   memberCount?: number
   currentCycle?: number
   status?: string
+  createdById?: string
   members?: Array<{ userId: string; role?: string; standing?: string; joinedAtMs?: number; status?: string }>
   startedAt?: Date | null
   payoutOrder?: string[] | null
@@ -28,13 +29,14 @@ function fund(opts: {
     status: m.status ?? 'pending',
     depositPaid: false,
     joinedAt: new Date(m.joinedAtMs ?? 1_000 + i),
-    user: { name: m.userId.toUpperCase(), trustScore: { standing: m.standing ?? 'good' } },
+    user: { name: m.userId.toUpperCase(), phone: `+233240000${100 + i}`, trustScore: { standing: m.standing ?? 'good' } },
   }))
   return {
     id: opts.id ?? 'f1',
     name: 'Kumasi Traders',
     type: 'Susu',
     status: opts.status ?? 'active',
+    createdById: opts.createdById ?? 'creator',
     susu: {
       contribution: 50000,
       frequency: 'monthly',
@@ -371,6 +373,15 @@ describe('FundsService.detail', () => {
     const db = { fund: { findUnique: jest.fn().mockResolvedValue(f) }, payout: { findUnique: jest.fn().mockResolvedValue(null) }, invite: { count: jest.fn().mockResolvedValue(0) } }
     const out = await makeSvc(db).detail('safe', 'f1')
     expect(out.payoutOrder).toEqual(['safe', 'mid', 'risky'])
+  })
+
+  it('shows other members’ MoMo full to the organizer, masked to everyone else', async () => {
+    const f = fund({ createdById: 'a', members: [{ userId: 'a' }, { userId: 'b' }] }) // a → …100, b → …101
+    const db = { fund: { findUnique: jest.fn().mockResolvedValue(f) }, payout: { findUnique: jest.fn().mockResolvedValue(null) }, invite: { count: jest.fn().mockResolvedValue(0) } }
+    const asOrganizer = await makeSvc(db).detail('a', 'f1')
+    expect(asOrganizer.members.find((m) => m.userId === 'b')!.phone).toBe('+233240000101')
+    const asMember = await makeSvc(db).detail('b', 'f1')
+    expect(asMember.members.find((m) => m.userId === 'a')!.phone).toBe('••• 100')
   })
 
   it('rejects a non-member with 403 FORBIDDEN', async () => {

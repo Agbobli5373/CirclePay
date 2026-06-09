@@ -68,6 +68,9 @@ export class MemberDto {
 
   @ApiProperty({ example: 1, description: 'Position in the payout order (1-based).' })
   payoutPosition!: number
+
+  @ApiProperty({ example: '••• 872', description: "Member's MoMo number — full for the organizer, masked (last 3) for other members." })
+  phone!: string
 }
 
 /** Full fund detail (members + payout order + this-cycle progress). */

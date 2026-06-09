@@ -106,6 +106,7 @@ export interface MemberView {
   depositPaid: boolean
   trustStanding: string
   payoutPosition: number
+  phone: string // full for the organizer, masked (last 3) for other members
 }
 
 export interface FundDetail extends FundSummary {
